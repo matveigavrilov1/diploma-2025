@@ -2,10 +2,10 @@
 #include <iostream>
 #include <mutex>
 
-#include "task-manager.h"
-#include "thread-pool.h"
+#include "core/task-manager.h"
+#include "core/thread-pool.h"
 
-#include "src/consts.h"
+#include "consts.h"
 
 std::mutex mtx;
 

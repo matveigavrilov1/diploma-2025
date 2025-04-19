@@ -34,7 +34,7 @@ public:
 		// Очистка памяти (в реальном коде нужно аккуратно обрабатывать многопоточность)
 		while (node<T>* current = head_.load())
 		{
-			head_.store(current->next);
+			head_.store(current->next_);
 			delete current;
 		}
 	}
@@ -46,7 +46,7 @@ public:
 		while (true)
 		{
 			node<T>* current_tail = tail_.load(std::memory_order_acquire);
-			node<T>* next = current_tail->next.load(std::memory_order_acquire);
+			node<T>* next = current_tail->next_.load(std::memory_order_acquire);
 
 			// Проверяем, что tail не изменился
 			if (current_tail != tail_.load(std::memory_order_relaxed))
@@ -57,7 +57,7 @@ public:
 			if (next == nullptr)
 			{
 				// Пытаемся добавить new_node в конец
-				if (current_tail->next.compare_exchange_weak(next, new_node, std::memory_order_release, std::memory_order_relaxed))
+				if (current_tail->next_.compare_exchange_weak(next, new_node, std::memory_order_release, std::memory_order_relaxed))
 				{
 					// Успешно добавили, обновляем tail
 					tail_.compare_exchange_strong(current_tail, new_node, std::memory_order_release, std::memory_order_relaxed);
@@ -82,7 +82,7 @@ public:
 		{
 			current_head = head_.load(std::memory_order_acquire);
 			current_tail = tail_.load(std::memory_order_acquire);
-			next = current_head->next.load(std::memory_order_acquire);
+			next = current_head->next_.load(std::memory_order_acquire);
 
 			if (current_head == head_.load(std::memory_order_acquire))
 			{

@@ -1,11 +1,11 @@
 #include <coroutine>
 #include <iostream>
 
-#include "task-manager.h"
-#include "thread-pool.h"
-#include "coro-mutex.h"
+#include "core/task-manager.h"
+#include "core/thread-pool.h"
+#include "core/coro-mutex.h"
 
-#include "src/consts.h"
+#include "consts.h"
 
 cs::coroMutex mtx;
 
