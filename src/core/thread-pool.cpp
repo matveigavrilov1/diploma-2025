@@ -39,6 +39,11 @@ void threadPool::pushTask(const task_t& task)
 		queue_.push(task);
 }
 
+std::atomic<bool>& threadPool::running()
+{
+	return running_;
+}
+
 void threadPool::worker()
 {
 	while (running_)

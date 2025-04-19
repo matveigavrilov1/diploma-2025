@@ -33,8 +33,8 @@ int main()
 		cs::taskManager::instance().execute(producer(x, i));
 	}
 
-
-	cs::taskManager::instance().run();
+	while (tp->running())
+	{ }
 
 	return 0;
 }

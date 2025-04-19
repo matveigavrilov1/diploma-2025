@@ -20,6 +20,8 @@ public:
 
 	void pushTask(task_t&& task);
 	void pushTask(const task_t& task);
+	
+	std::atomic<bool>& running();
 
 private:
 	void worker();
