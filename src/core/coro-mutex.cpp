@@ -14,7 +14,7 @@ bool cs::coroMutex::awaiter::await_ready()
 
 void cs::coroMutex::awaiter::await_suspend(std::coroutine_handle<> handle)
 {
-	cm_.queue_.push(handle);
+	cm_.queue_.enqueue(handle);
 }
 
 void cs::coroMutex::awaiter::await_resume() { }
@@ -32,7 +32,7 @@ cs::coroMutex::awaiter cs::coroMutex::lock()
 void cs::coroMutex::unlock()
 {
 	std::coroutine_handle<> handle;
-	if (queue_.pop(handle))
+	if (queue_.try_dequeue(handle))
 	{
 		cs::taskManager::instance().execute(handle);
 	}

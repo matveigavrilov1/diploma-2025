@@ -13,13 +13,12 @@ cs::task producer(int& x, int id)
 {
 	for (size_t i = 0; i < MAX; ++i)
 	{
-		co_await std::suspend_never {};
-
 		mtx.lock();
 		++x;
 		mtx.unlock();
 	}
 	std::cout << "producer " << id << " finished: " << x << std::endl;
+	co_return;
 }
 
 int main()

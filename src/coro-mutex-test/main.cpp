@@ -13,8 +13,6 @@ cs::task producer(int& x, int id)
 {
 	for (size_t i = 0; i < MAX; ++i)
 	{
-		co_await std::suspend_never {};
-
 		co_await mtx.lock();
 		++x;
 		mtx.unlock();
@@ -33,7 +31,6 @@ int main()
 	{
 		cs::taskManager::instance().execute(producer(x, i));
 	}
-
 
 	cs::taskManager::instance().run();
 

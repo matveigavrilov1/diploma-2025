@@ -6,9 +6,9 @@ template<typename T>
 struct node
 {
 	T data;
-	std::atomic<node*> next;
+	std::atomic<node<T>*> next;
 
-	node(const T& data)
+	explicit node(const T& data)
 	: data(data)
 	, next(nullptr)
 	{ }
@@ -23,6 +23,7 @@ class lfQueue
 public:
 	lfQueue()
 	{
+		// Инициализируем с dummy-узлом
 		node<T>* dummy = new node<T>(T {});
 		head.store(dummy, std::memory_order_relaxed);
 		tail.store(dummy, std::memory_order_relaxed);
@@ -30,41 +31,45 @@ public:
 
 	~lfQueue()
 	{
-		T val;
-		while (pop(val))
-			;
-		delete head.load(std::memory_order_relaxed);
+		// Очистка памяти (в реальном коде нужно аккуратно обрабатывать многопоточность)
+		while (node<T>* current = head.load())
+		{
+			head.store(current->next);
+			delete current;
+		}
 	}
 
 	void push(const T& data)
 	{
 		node<T>* new_node = new node<T>(data);
 
-		node<T>* current_tail = nullptr;
-		node<T>* next = nullptr;
-
 		while (true)
 		{
-			current_tail = tail.load(std::memory_order_acquire);
-			next = current_tail->next.load(std::memory_order_acquire);
+			node<T>* current_tail = tail.load(std::memory_order_acquire);
+			node<T>* next = current_tail->next.load(std::memory_order_acquire);
 
-			if (current_tail == tail.load(std::memory_order_acquire))
+			// Проверяем, что tail не изменился
+			if (current_tail != tail.load(std::memory_order_relaxed))
 			{
-				if (next == nullptr)
+				continue;
+			}
+
+			if (next == nullptr)
+			{
+				// Пытаемся добавить new_node в конец
+				if (current_tail->next.compare_exchange_weak(next, new_node, std::memory_order_release, std::memory_order_relaxed))
 				{
-					if (current_tail->next.compare_exchange_strong(next, new_node, std::memory_order_release, std::memory_order_relaxed))
-					{
-						break;
-					}
-				}
-				else
-				{
-					tail.compare_exchange_strong(current_tail, next, std::memory_order_release, std::memory_order_relaxed);
+					// Успешно добавили, обновляем tail
+					tail.compare_exchange_strong(current_tail, new_node, std::memory_order_release, std::memory_order_relaxed);
+					break;
 				}
 			}
+			else
+			{
+				// Помогаем другим потокам продвинуть tail
+				tail.compare_exchange_strong(current_tail, next, std::memory_order_release, std::memory_order_relaxed);
+			}
 		}
-
-		tail.compare_exchange_strong(current_tail, new_node, std::memory_order_release, std::memory_order_relaxed);
 	}
 
 	bool pop(T& result)

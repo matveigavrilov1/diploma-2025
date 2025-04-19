@@ -9,20 +9,6 @@ void taskManager::init(std::shared_ptr<threadPool> tp)
 	tp_ = tp;
 }
 
-void taskManager::run()
-{
-	if (running_)
-		return;
-	running_ = true;
-	while (running_)
-	{ }
-}
-
-void taskManager::stop()
-{
-	running_ = false;
-}
-
 void taskManager::execute(std::coroutine_handle<>& taskToExecute)
 {
 	auto lambdaTask = [handle = taskToExecute]() mutable

@@ -3,8 +3,9 @@
 #include <atomic>
 #include <coroutine>
 
-#include "lf-queue.h"
+// #include "lf-queue.h"
 
+#include "concurrentqueue.h"
 namespace cs
 {
 class coroMutex
@@ -29,7 +30,7 @@ public:
 	void unlock();
 
 private:
-    lfQueue<std::coroutine_handle<>> queue_;
+    moodycamel::ConcurrentQueue<std::coroutine_handle<>> queue_;
 	std::atomic<bool> locked_ { false };
 };
 } // namespace cs
