@@ -69,10 +69,14 @@ TEST(CoroMutexTest, BasicLockAndUnlockByCoro)
 
 	taskManager::instance().execute(coro());
 
-	while (!ready)
+	size_t maxWaitingTime = 100;
+	size_t waitingTime = 0;
+	while (!ready && waitingTime < maxWaitingTime)
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		waitingTime++;
 	}
+	ASSERT_NE(waitingTime, maxWaitingTime);
 
 	EXPECT_FALSE(mtx.locked());
 	EXPECT_EQ(counter, 1);
@@ -106,10 +110,14 @@ TEST(CoroMutexTest, CoroExecutionAfterUnlock)
 
 	mtx.unlock();
 
-	while (!ready)
+	size_t maxWaitingTime = 100;
+	size_t waitingTime = 0;
+	while (!ready && waitingTime < maxWaitingTime)
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		waitingTime++;
 	}
+	ASSERT_NE(waitingTime, maxWaitingTime);
 
 	EXPECT_EQ(counter, 1);
 	tp->stop();
@@ -144,8 +152,14 @@ TEST(CoroMutexTest, RaceCondition)
 		taskManager::instance().execute(coro(MAX));
 	}
 
-	while (completed.load() < coroCount)
-	{ }
+	size_t maxWaitingTime = 10000;
+	size_t waitingTime = 0;
+	while (completed.load() < coroCount && waitingTime < maxWaitingTime)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds { true });
+		waitingTime++;
+	}
+	ASSERT_NE(waitingTime, maxWaitingTime);
 
 	EXPECT_EQ(counter, MAX * coroCount);
 	tp->stop();
@@ -169,26 +183,36 @@ TEST(CoroMutexTest, RecursiveLock)
 		mtx.unlock();
 		ready2 = true;
 	};
-
+	
 	taskManager::instance().execute(recursiveCoro());
-	while (!ready1)
+
+	size_t maxWaitingTime1 = 100;
+	size_t waitingTime1 = 0;
+	while (!ready1 && waitingTime1 < maxWaitingTime1)
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		waitingTime1++;
 	}
+	ASSERT_NE(waitingTime1, maxWaitingTime1);
 
 	EXPECT_FALSE(secondLockSuccess);
 	mtx.unlock();
 
-	while (!ready2)
+	size_t maxWaitingTime2 = 100;
+	size_t waitingTime2 = 0;
+	while (!ready2 && waitingTime2 < maxWaitingTime2)
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		waitingTime2++;
 	}
+	ASSERT_NE(waitingTime2, maxWaitingTime2);
+
 	EXPECT_TRUE(secondLockSuccess);
 
 	tp->stop();
 }
 
-TEST(CoroMutexTest, LockOrderIsFIFO)
+TEST(CoroMutexTest, ExecutionOrdering)
 {
 	coroMutex mtx;
 	auto tp = std::make_shared<threadPool>(1);
@@ -212,8 +236,14 @@ TEST(CoroMutexTest, LockOrderIsFIFO)
 		taskManager::instance().execute(coro(i));
 	}
 
-	while (completed.load() < coroCount)
-	{ }
+	size_t maxWaitingTime = 100;
+	size_t waitingTime = 0;
+	while (completed.load() < coroCount && waitingTime < maxWaitingTime)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		waitingTime++;
+	}
+	ASSERT_NE(waitingTime, maxWaitingTime);
 
 	for (int i = 0; i < coroCount; ++i)
 	{
