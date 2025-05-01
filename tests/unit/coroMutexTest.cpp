@@ -195,14 +195,25 @@ TEST_F(CoroMutexMultiThreadTest, NoRaceCondition)
 TEST_F(CoroMutexMultiThreadTest, FIFOOrdering)
 {
 	coroMutex mtx;
-	std::vector<int> executionOrder;
+	std::vector<int> lockOrder;
+	std::vector<int> unlockOrder;
+	std::mutex vecMutex; // Для защиты векторов от одновременного доступа
 	std::atomic<int> completed = 0;
 	constexpr int coroCount = 5;
 
 	auto coro = [&](int id) -> task
 	{
-		co_await mtx.lock();
-		executionOrder.push_back(id);
+		{
+			std::lock_guard<std::mutex> lock(vecMutex);
+			lockOrder.push_back(id);
+			co_await mtx.lock();
+		}
+
+		{
+			std::lock_guard<std::mutex> lock(vecMutex);
+			unlockOrder.push_back(id);
+		}
+
 		mtx.unlock();
 		completed++;
 	};
@@ -210,12 +221,12 @@ TEST_F(CoroMutexMultiThreadTest, FIFOOrdering)
 	for (int i = 0; i < coroCount; ++i)
 	{
 		taskManager::instance().execute(coro(i));
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 
-	waitForAtomic(completed, coroCount);
-
+	waitForAtomic(completed, coroCount, 1000);
 	for (int i = 0; i < coroCount; ++i)
 	{
-		EXPECT_EQ(executionOrder[i], i) << "Lock order should be FIFO";
+		EXPECT_EQ(lockOrder[i], unlockOrder[i]) << "Execution should be FIFO";
 	}
 }

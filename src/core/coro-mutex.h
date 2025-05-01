@@ -32,8 +32,8 @@ public:
 
 	std::atomic<bool>& locked();
 private:
-	lfQueue<std::coroutine_handle<>> queue_;
-	// moodycamel::ConcurrentQueue<std::coroutine_handle<>> queue_;
+	// lfQueue<std::coroutine_handle<>> queue_;
+	moodycamel::ConcurrentQueue<std::coroutine_handle<>> queue_;
 	std::atomic<bool> locked_ { false };
 };
 } // namespace cs
