@@ -2,6 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <chrono>
 #include <fstream>
 #include <numeric>
 #include <iostream>
@@ -33,6 +34,7 @@ void atomicCounterLogger::start()
 		return;
 
 	running_ = true;
+	startTime_ = std::chrono::steady_clock::now();
 	worker_ = std::thread(&atomicCounterLogger::worker, this);
 }
 
@@ -97,13 +99,24 @@ void atomicCounterLogger::dump()
 {
 	std::lock_guard<std::mutex> lock(mtx_);
 
-	auto now = std::chrono::system_clock::now();
-	std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+	auto now = std::chrono::steady_clock::now();
+	auto elapsed = now - startTime_;
 
 	std::ofstream out(filename_, std::ios_base::app);
 	if (out.is_open())
 	{
-		out << std::put_time(std::localtime(&now_time), "%Y-%m-%d %H:%M:%S") << ",";
+		// Разбиваем время на компоненты
+		auto hours = std::chrono::duration_cast<std::chrono::hours>(elapsed);
+		elapsed -= hours;
+		auto minutes = std::chrono::duration_cast<std::chrono::minutes>(elapsed);
+		elapsed -= minutes;
+		auto seconds = std::chrono::duration_cast<std::chrono::seconds>(elapsed);
+		elapsed -= seconds;
+		auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
+
+		// Форматируем время как "часы:минуты:секунды.миллисекунды"
+		out << std::setfill('0') << std::setw(2) << hours.count() << ":" << std::setw(2) << minutes.count() << ":" << std::setw(2) << seconds.count() << "."
+				<< std::setw(3) << milliseconds.count() << ",";
 
 		// Записываем каждый счетчик
 		for (size_t i = 0; i < counters_.size(); ++i)

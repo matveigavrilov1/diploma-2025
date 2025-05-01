@@ -37,5 +37,6 @@ private:
 	std::thread worker_;
 	std::atomic<bool> running_;
 	std::mutex mtx_;
+	std::chrono::time_point<std::chrono::steady_clock> startTime_;
 };
 } // namespace cs
