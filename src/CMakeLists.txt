@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.10.0)
 
 set(CORE_SOURCES
-    core/task.cpp
-    core/thread-pool.cpp
-    core/task-manager.cpp
-    core/coro-mutex.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/task.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/thread-pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/task-manager.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/coro-mutex.cpp
 )
 
 set(RACE_CONDITION_TARGET_NAME race_condition)
@@ -28,3 +28,5 @@ add_executable(${STD_MUTEX_TEST_TARGET_NAME} std-mutex-test/main.cpp ${CORE_SOUR
 target_link_libraries(${STD_MUTEX_TEST_TARGET_NAME}
     PRIVATE 
         concurrentqueue)
+
+add_subdirectory(benchmark)

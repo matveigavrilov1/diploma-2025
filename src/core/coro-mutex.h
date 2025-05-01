@@ -3,7 +3,7 @@
 #include <atomic>
 #include <coroutine>
 
-// #include "lf-queue.h"
+#include "lf-queue.h"
 
 #include "concurrentqueue.h"
 
@@ -32,7 +32,8 @@ public:
 
 	std::atomic<bool>& locked();
 private:
-	moodycamel::ConcurrentQueue<std::coroutine_handle<>> queue_;
+	lfQueue<std::coroutine_handle<>> queue_;
+	// moodycamel::ConcurrentQueue<std::coroutine_handle<>> queue_;
 	std::atomic<bool> locked_ { false };
 };
 } // namespace cs
