@@ -1,9 +1,14 @@
 #include <chrono>
 #include <csignal>
-#include <optional>
+#include <spdlog/spdlog.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
+#include <iostream>
+
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 
 #include "benchmark/atomic-counter-logger.h"
 #include "benchmark/coro.h"
@@ -19,10 +24,129 @@ std::atomic<bool> running { true };
 std::shared_ptr<cs::threadPool> tp;
 std::optional<cs::atomicCounterLogger> counter;
 
+void signalHandler(int signal);
+
+REGISTER_OPTION("help", 'h', helpOption, bool, false);
+REGISTER_OPTION("threads-number", 'n', threadsNumberOption, size_t, 10);
+REGISTER_OPTION("coro-number", 'c', coroNumberOption, size_t, 5);
+REGISTER_OPTION("shared-number", 's', sharedNumberOption, size_t, 1);
+REGISTER_OPTION("target", 't', targetOption, std::string, "cm");
+REGISTER_OPTION("dump-period", 'd', dumpPeriodOption, size_t, 1000);
+REGISTER_OPTION("working-time", 'w', workingTimeOption, size_t, 20);
+
+void setUpOptions(cs::optionsParser& parser);
+void serializeOptions(cs::optionsManager& options);
+
+std::string getCounterLogFileName();
+std::string getLogFileName();
+
+void initLogger();
+
+int main(int argc, char* argv[])
+{
+	initLogger();
+
+	spdlog::info("Benchmark started");
+	// signal handling
+	spdlog::debug("Setting up signal handlers");
+	std::signal(SIGTERM, signalHandler);
+
+	// options parsing
+	spdlog::debug("Parsing command line options");
+	cs::optionsParser parser;
+	setUpOptions(parser);
+	parser.parse(argc, argv);
+	cs::optionsManager options(parser);
+	serializeOptions(options);
+
+	spdlog::info("Parsed command line options:");
+	spdlog::info("  help: {}", helpOption);
+	spdlog::info("  threads-number (-n): {}", threadsNumberOption);
+	spdlog::info("  coro-number (-c): {}", coroNumberOption);
+	spdlog::info("  shared-number (-s): {}", sharedNumberOption);
+	spdlog::info("  target (-t): {}", targetOption);
+	spdlog::info("  dump-period (-d): {} ms", dumpPeriodOption);
+	spdlog::info("  working-time (-w): {} seconds", workingTimeOption);
+
+	if (helpOption)
+	{
+		spdlog::info("Showing help message");
+		parser.printHelp();
+		return 0;
+	}
+
+	// initialization
+	spdlog::info("Initializing components");
+	try
+	{
+		counter.emplace(getCounterLogFileName(), std::chrono::milliseconds(dumpPeriodOption), sharedNumberOption);
+		spdlog::debug("Counter initialized with dump period: {} ms, and shared objects number: {}", dumpPeriodOption, sharedNumberOption);
+
+		tp = std::make_shared<cs::threadPool>(threadsNumberOption);
+		spdlog::debug("Thread pool initialized with {} threads", threadsNumberOption);
+
+		cs::taskManager::instance().init(tp);
+		spdlog::debug("Task manager initialized");
+	}
+	catch (const std::exception& e)
+	{
+		spdlog::error("Initialization failed: {}", e.what());
+		return 1;
+	}
+
+	std::mutex mtx;
+	cs::coroMutex coroMtx;
+
+	// coroutines start
+	spdlog::info("Starting {} coroutines", coroNumberOption);
+	for (size_t i = 0; i < coroNumberOption; ++i)
+	{
+		try
+		{
+			if (targetOption == "m")
+			{
+				cs::taskManager::instance().execute(coroutine(*counter, i % sharedNumberOption, running, mtx));
+				spdlog::debug("Started coroutine {} with std::mutex. id: {}", i, i % sharedNumberOption);
+			}
+			else
+			{
+				cs::taskManager::instance().execute(coroutine(*counter, i % sharedNumberOption, running, coroMtx));
+				spdlog::debug("Started coroutine {} with coroMutex.  id: {}", i, i % sharedNumberOption);
+			}
+		}
+		catch (const std::exception& e)
+		{
+			spdlog::error("Failed to start coroutine {}: {}", i, e.what());
+		}
+	}
+
+	// workers start
+	counter->start();
+
+	spdlog::info("Starting {} threads", threadsNumberOption);
+	tp->start();
+
+	// waiting
+	spdlog::info("Running for {} seconds", workingTimeOption);
+	std::this_thread::sleep_for(std::chrono::seconds(workingTimeOption));
+
+	// finish
+	spdlog::info("Shutting down");
+	running = false;
+	tp->stop();
+	counter->stop();
+
+	spdlog::info("Benchmark finished successfully");
+	spdlog::shutdown();
+	return 0;
+}
+
 void signalHandler(int signal)
 {
 	if (signal == SIGTERM)
 	{
+		spdlog::info("Got SIGTERM");
+
 		running = false;
 		if (tp)
 		{
@@ -35,14 +159,6 @@ void signalHandler(int signal)
 		std::exit(0);
 	}
 }
-
-REGISTER_OPTION("help", 'h', helpOption, bool, false);
-REGISTER_OPTION("threads-number", 'n', threadsNumberOption, size_t, 10);
-REGISTER_OPTION("coro-number", 'c', coroNumberOption, size_t, 5);
-REGISTER_OPTION("shared-number", 's', sharedNumberOption, size_t, 1);
-REGISTER_OPTION("target", 't', targetOption, std::string, "cm");
-REGISTER_OPTION("dump-period", 'd', dumpPeriodOption, size_t, 1000);
-REGISTER_OPTION("working-time", 'w', workingTimeOption, size_t, 20);
 
 void setUpOptions(cs::optionsParser& parser)
 {
@@ -66,7 +182,7 @@ void serializeOptions(cs::optionsManager& options)
 	workingTimeOption = options.getUInt64(workingTimeOptionName, workingTimeOption);
 }
 
-std::string getLogFileName()
+std::string getLogFilesBase()
 {
 	auto now = std::chrono::system_clock::now();
 	auto in_time_t = std::chrono::system_clock::to_time_t(now);
@@ -83,64 +199,38 @@ std::string getLogFileName()
                    << "shared_" << sharedNumberOption << "_"
                    << "target_" << targetOption << "_"
                    << "dump_" << dumpPeriodOption << "_"
-                   << "worktime_" << workingTimeOption
-                   << ".csv";
+                   << "worktime_" << workingTimeOption;
 	// clang-format on
 
 	return filenameStream.str();
 }
 
-int main(int argc, char* argv[])
+std::string getCounterLogFileName()
 {
-	// signal handling
-	std::signal(SIGTERM, signalHandler);
+	return getLogFilesBase() + ".csv";
+}
 
-	// options parsing
-	cs::optionsParser parser;
-	setUpOptions(parser);
-	parser.parse(argc, argv);
-	cs::optionsManager options(parser);
-	serializeOptions(options);
+std::string getLogFileName()
+{
+	return getLogFilesBase() + ".log";
+}
 
-	if (helpOption)
+void initLogger()
+{
+	try
 	{
-		parser.printHelp();
-		return 0;
+		auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+		auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(getLogFileName(), true);
+
+		std::vector<spdlog::sink_ptr> sinks { console_sink, file_sink };
+		auto logger = std::make_shared<spdlog::logger>("main", begin(sinks), end(sinks));
+
+		logger->set_level(spdlog::level::trace);
+		spdlog::set_default_logger(logger);
 	}
-
-	// initialization
-	counter.emplace(getLogFileName(), std::chrono::milliseconds(dumpPeriodOption), sharedNumberOption);
-	tp = std::make_shared<cs::threadPool>(sharedNumberOption);
-	cs::taskManager::instance().init(tp);
-
-	// targets
-	std::mutex mtx;
-	cs::coroMutex coroMtx;
-
-	// coroutines start
-	for (size_t i = 0; i < coroNumberOption; ++i)
+	catch (const spdlog::spdlog_ex& ex)
 	{
-		if (targetOption == "m")
-		{
-			cs::taskManager::instance().execute(coroutine(*counter, i % sharedNumberOption, running, mtx));
-		}
-		else
-		{
-			cs::taskManager::instance().execute(coroutine(*counter, i % sharedNumberOption, running, coroMtx));
-		}
+		std::cerr << "Log initialization failed: " << ex.what() << std::endl;
+		std::exit(1);
 	}
-
-	// workers start
-	counter->start();
-	tp->start();
-
-    // waiting
-	std::this_thread::sleep_for(std::chrono::seconds(workingTimeOption));
-
-	// finish
-	running = false;
-	tp->stop();
-	counter->stop();
-
-	return 0;
 }

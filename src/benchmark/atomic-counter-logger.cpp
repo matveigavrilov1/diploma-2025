@@ -1,5 +1,7 @@
 #include "benchmark/atomic-counter-logger.h"
 
+#include <spdlog/spdlog.h>
+
 #include <fstream>
 #include <numeric>
 #include <iostream>
@@ -48,24 +50,29 @@ void atomicCounterLogger::increment(size_t counter_index)
 {
 	if (counter_index >= counters_.size())
 	{
+		spdlog::error("Failed to increment {} element. Counters number {}", counter_index, counters_.size());
 		return;
 	}
 	counters_[counter_index].fetch_add(1, std::memory_order_relaxed);
+	spdlog::trace("Incremented counter: {}, value: {}", counter_index, counters_[counter_index].load());
 }
 
 void atomicCounterLogger::decrement(size_t counter_index)
 {
 	if (counter_index >= counters_.size())
 	{
+		spdlog::error("Failed to decrement {} element. Counters number {}", counter_index, counters_.size());
 		return;
 	}
 	counters_[counter_index].fetch_sub(1, std::memory_order_relaxed);
+	spdlog::trace("Decremented counter: {}, value: {}", counter_index, counters_[counter_index].load());
 }
 
 int64_t atomicCounterLogger::get(size_t counter_index) const
 {
 	if (counter_index >= counters_.size())
 	{
+		spdlog::error("Failed to get {} element. Counters number {}", counter_index, counters_.size());
 		return 0;
 	}
 	return counters_[counter_index].load(std::memory_order_relaxed);
@@ -111,6 +118,6 @@ void atomicCounterLogger::dump()
 	}
 	else
 	{
-		std::cerr << "Failed to open file: " << filename_ << std::endl;
+		spdlog::error("Failed to open file: {}", filename_);
 	}
 }

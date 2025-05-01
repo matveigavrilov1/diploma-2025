@@ -13,4 +13,5 @@ add_executable(${BENCHMARK_TARGET_NAME} main.cpp ${CORE_SOURCES} ${BENCHMARK_SOU
 
 target_link_libraries(${BENCHMARK_TARGET_NAME}
     PRIVATE 
-        concurrentqueue)
+        concurrentqueue
+        spdlog)
