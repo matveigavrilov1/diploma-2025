@@ -1,5 +1,7 @@
 #include "benchmark/coro.h"
+#include <chrono>
 #include <coroutine>
+#include <thread>
 
 cs::task coroutine(cs::atomicCounterLogger& counter, size_t id, std::atomic<bool>& running, cs::coroMutex& mtx)
 {
@@ -7,8 +9,8 @@ cs::task coroutine(cs::atomicCounterLogger& counter, size_t id, std::atomic<bool
 	{
 		co_await mtx.lock();
 		counter.increment(id);
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		mtx.unlock();
-		co_await std::suspend_always {};
 	}
 }
 
@@ -16,8 +18,10 @@ cs::task coroutine(cs::atomicCounterLogger& counter, size_t id, std::atomic<bool
 {
 	while (running)
 	{
-		std::lock_guard<std::mutex> lk { mtx };
+		mtx.lock();
 		counter.increment(id);
-		co_await std::suspend_always {};
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		mtx.unlock();
 	}
+	co_return;
 }

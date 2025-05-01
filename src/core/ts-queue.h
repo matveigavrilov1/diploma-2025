@@ -2,7 +2,7 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
-
+#include <optional>
 namespace cs
 {
 
@@ -21,6 +21,18 @@ public:
 		queue_.emplace(std::forward<Args>(args)...);
 		lock.unlock();
 		cond_.notify_one();
+	}
+
+	bool pop(T& value)
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (queue_.empty())
+		{
+			return false;
+		}
+		value = std::move(queue_.front());
+		queue_.pop();
+		return true;
 	}
 
 	bool wait_and_pop(T& value, std::atomic<bool>& running)

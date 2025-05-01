@@ -1,35 +1,38 @@
 #pragma once
 
 #include <atomic>
-#include <thread>
 #include <vector>
+#include <thread>
 #include <functional>
-#include "ts-queue.h"
+
+#include "concurrentqueue.h" // Предполагается, что у вас есть потокобезопасная очередь
 
 namespace cs
 {
+
 class threadPool
 {
 public:
-	explicit threadPool(size_t workersCount = 1);
+	using task_t = std::function<void()>;
+
+	explicit threadPool(size_t workersCount);
 
 	void start();
-	void stop();
-
-	using task_t = std::function<void()>;
+	void stop() noexcept;
 
 	void pushTask(task_t&& task);
 	void pushTask(const task_t& task);
-	
-	std::atomic<bool>& running();
+
+	std::atomic<bool>& running() { return running_; }
 
 private:
-	void worker();
+	void worker(size_t thread_idx);
 
-private:
-	size_t workersCount_ { 1 };
-	tsQueue<task_t> queue_;
-	std::vector<std::jthread> workers_;
+
+	size_t workersCount_;
 	std::atomic<bool> running_ { false };
+	std::vector<std::thread> workers_;
+	std::vector<moodycamel::ConcurrentQueue<task_t>> queues_;
 };
+
 } // namespace cs

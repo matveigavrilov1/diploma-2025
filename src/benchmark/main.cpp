@@ -93,9 +93,14 @@ int main(int argc, char* argv[])
 		spdlog::error("Initialization failed: {}", e.what());
 		return 1;
 	}
-
+	
 	std::mutex mtx;
 	cs::coroMutex coroMtx;
+	// workers start
+	counter->start();
+
+	spdlog::info("Starting {} threads", threadsNumberOption);
+	tp->start();
 
 	// coroutines start
 	spdlog::info("Starting {} coroutines", coroNumberOption);
@@ -120,11 +125,6 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	// workers start
-	counter->start();
-
-	spdlog::info("Starting {} threads", threadsNumberOption);
-	tp->start();
 
 	// waiting
 	spdlog::info("Running for {} seconds", workingTimeOption);
@@ -225,7 +225,7 @@ void initLogger()
 		std::vector<spdlog::sink_ptr> sinks { console_sink, file_sink };
 		auto logger = std::make_shared<spdlog::logger>("main", begin(sinks), end(sinks));
 
-		logger->set_level(spdlog::level::trace);
+		logger->set_level(spdlog::level::info);
 		spdlog::set_default_logger(logger);
 	}
 	catch (const spdlog::spdlog_ex& ex)
