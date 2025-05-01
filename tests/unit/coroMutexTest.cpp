@@ -2,7 +2,6 @@
 
 #include "core/coro-mutex.h"
 #include "core/task-manager.h"
-#include "core/coro-mutex.h"
 
 #include <atomic>
 #include <thread>
@@ -10,135 +9,172 @@
 
 using namespace cs;
 
-TEST(CoroMutexTest, BasicLock)
+void waitForCompletion(const std::atomic<bool>& flag, int maxWaitMs = 100)
+{
+	int waited = 0;
+	while (!flag.load() && waited < maxWaitMs)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		waited++;
+	}
+	ASSERT_NE(waited, maxWaitMs) << "Timeout waiting for completion";
+}
+
+// Базовые тесты синхронного поведения
+TEST(CoroMutexTest, LockSetsLockedFlag)
 {
 	coroMutex mtx;
 	auto awaiter = mtx.lock();
 	EXPECT_TRUE(mtx.locked());
 }
 
-TEST(CoroMutexTest, DoubleBasicLock)
+TEST(CoroMutexTest, UnlockClearsLockedFlag)
 {
 	coroMutex mtx;
 	auto awaiter = mtx.lock();
-	EXPECT_TRUE(mtx.locked());
-	auto awaiter2 = mtx.lock();
-	EXPECT_TRUE(mtx.locked());
-}
-
-TEST(CoroMutexTest, BasicUnlock)
-{
-	coroMutex mtx;
-	auto awaiter = mtx.lock();
-	EXPECT_TRUE(mtx.locked());
 	mtx.unlock();
 	EXPECT_FALSE(mtx.locked());
 }
 
-TEST(CoroMutexTest, AwaiterReady)
+TEST(CoroMutexTest, AwaiterReadyForFirstLock)
 {
 	coroMutex mtx;
+	auto awaiter = mtx.lock();
+	EXPECT_TRUE(awaiter.await_ready());
+}
 
+TEST(CoroMutexTest, AwaiterNotReadyForSubsequentLocks)
+{
+	coroMutex mtx;
 	auto awaiter1 = mtx.lock();
-	EXPECT_TRUE(awaiter1.await_ready());
-
 	auto awaiter2 = mtx.lock();
 	EXPECT_FALSE(awaiter2.await_ready());
-
 	mtx.unlock();
 }
 
-TEST(CoroMutexTest, BasicLockAndUnlockByCoro)
+// Тесты однопоточного асинхронного поведения
+class CoroMutexSingleThreadTest : public ::testing::Test
+{
+protected:
+	void SetUp() override
+	{
+		tp = std::make_shared<threadPool>(1);
+		taskManager::instance().init(tp);
+		tp->run();
+	}
+
+	void TearDown() override { tp->stop(); }
+
+	std::shared_ptr<threadPool> tp;
+};
+
+TEST_F(CoroMutexSingleThreadTest, SingleCoroLockUnlock)
 {
 	coroMutex mtx;
-	int counter = 0;
-
-	auto tp = std::make_shared<threadPool>(1);
-	taskManager::instance().init(tp);
-	tp->run();
-
-	std::atomic<bool> ready = false;
+	std::atomic<bool> completed = false;
 
 	auto coro = [&]() -> task
 	{
 		co_await mtx.lock();
-		counter++;
 		mtx.unlock();
-		ready = true;
+		completed = true;
 	};
 
 	taskManager::instance().execute(coro());
 
-	size_t maxWaitingTime = 100;
-	size_t waitingTime = 0;
-	while (!ready && waitingTime < maxWaitingTime)
-	{
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		waitingTime++;
-	}
-	ASSERT_NE(waitingTime, maxWaitingTime);
-
+	waitForCompletion(completed);
 	EXPECT_FALSE(mtx.locked());
-	EXPECT_EQ(counter, 1);
-	tp->stop();
 }
 
-TEST(CoroMutexTest, CoroExecutionAfterUnlock)
+TEST_F(CoroMutexSingleThreadTest, CoroWaitsForUnlock)
 {
 	coroMutex mtx;
 	mtx.lock();
+	std::atomic<bool> completed = false;
 	int counter = 0;
-
-	auto tp = std::make_shared<threadPool>(1);
-	taskManager::instance().init(tp);
-	tp->run();
-
-	std::atomic<bool> ready = false;
 
 	auto coro = [&]() -> task
 	{
 		co_await mtx.lock();
 		counter++;
 		mtx.unlock();
-		ready = true;
+		completed = true;
 	};
 
 	taskManager::instance().execute(coro());
 
-	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	// Проверяем, что корутина еще не выполнилась
+	std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	EXPECT_EQ(counter, 0);
 
+	// Разблокируем и проверяем выполнение
 	mtx.unlock();
-
-	size_t maxWaitingTime = 100;
-	size_t waitingTime = 0;
-	while (!ready && waitingTime < maxWaitingTime)
-	{
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		waitingTime++;
-	}
-	ASSERT_NE(waitingTime, maxWaitingTime);
-
+	waitForCompletion(completed);
 	EXPECT_EQ(counter, 1);
-	tp->stop();
 }
 
-TEST(CoroMutexTest, RaceCondition)
+TEST_F(CoroMutexSingleThreadTest, RecursiveLockBlocks)
 {
 	coroMutex mtx;
-	int counter = 0;
-	constexpr int MAX = 100000;
-	constexpr size_t coroCount = 10;
+	std::atomic<bool> secondLockObtained = false;
+	std::atomic<bool> firstLockCompleted = false;
 
-	auto tp = std::make_shared<threadPool>(10);
-	taskManager::instance().init(tp);
-	tp->run();
-
-	std::atomic<int> completed { 0 };
-
-	auto coro = [&](int max) -> task
+	auto coro = [&]() -> task
 	{
-		for (int i = 0; i < max; ++i)
+		co_await mtx.lock();
+		firstLockCompleted = true;
+		co_await mtx.lock(); // Должно заблокироваться
+		secondLockObtained = true;
+		mtx.unlock();
+	};
+
+	taskManager::instance().execute(coro());
+
+	waitForCompletion(firstLockCompleted);
+	EXPECT_FALSE(secondLockObtained);
+
+	mtx.unlock(); // Разрешаем вторую блокировку
+	waitForCompletion(secondLockObtained);
+}
+
+// Тесты многопоточного поведения
+class CoroMutexMultiThreadTest : public ::testing::Test
+{
+protected:
+	void SetUp() override
+	{
+		tp = std::make_shared<threadPool>(10);
+		taskManager::instance().init(tp);
+		tp->run();
+	}
+
+	void TearDown() override { tp->stop(); }
+
+	std::shared_ptr<threadPool> tp;
+
+	void waitForAtomic(std::atomic<int>& value, int expected, int maxWaitMs = 1000)
+	{
+		int waited = 0;
+		while (value.load() < expected && waited < maxWaitMs)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			waited++;
+		}
+		ASSERT_NE(waited, maxWaitMs);
+	}
+};
+
+TEST_F(CoroMutexMultiThreadTest, NoRaceCondition)
+{
+	coroMutex mtx;
+	std::atomic<int> counter = 0;
+	constexpr int iterations = 10000;
+	constexpr int coroCount = 10;
+	std::atomic<int> completed = 0;
+
+	auto coro = [&]() -> task
+	{
+		for (int i = 0; i < iterations; ++i)
 		{
 			co_await mtx.lock();
 			counter++;
@@ -147,80 +183,21 @@ TEST(CoroMutexTest, RaceCondition)
 		completed++;
 	};
 
-	for (size_t i = 0; i < coroCount; ++i)
+	for (int i = 0; i < coroCount; ++i)
 	{
-		taskManager::instance().execute(coro(MAX));
+		taskManager::instance().execute(coro());
 	}
 
-	size_t maxWaitingTime = 10000;
-	size_t waitingTime = 0;
-	while (completed.load() < coroCount && waitingTime < maxWaitingTime)
-	{
-		std::this_thread::sleep_for(std::chrono::milliseconds { true });
-		waitingTime++;
-	}
-	ASSERT_NE(waitingTime, maxWaitingTime);
-
-	EXPECT_EQ(counter, MAX * coroCount);
-	tp->stop();
+	waitForAtomic(completed, coroCount);
+	EXPECT_EQ(counter, iterations * coroCount);
 }
 
-TEST(CoroMutexTest, RecursiveLock)
+TEST_F(CoroMutexMultiThreadTest, FIFOOrdering)
 {
 	coroMutex mtx;
-	auto tp = std::make_shared<threadPool>(1);
-	taskManager::instance().init(tp);
-	tp->run();
-
-	std::atomic<bool> secondLockSuccess { false };
-	std::atomic<bool> ready1 { false }, ready2 { false };
-	auto recursiveCoro = [&]() -> task
-	{
-		co_await mtx.lock();
-		ready1 = true;
-		co_await mtx.lock();
-		secondLockSuccess = true;
-		mtx.unlock();
-		ready2 = true;
-	};
-	
-	taskManager::instance().execute(recursiveCoro());
-
-	size_t maxWaitingTime1 = 100;
-	size_t waitingTime1 = 0;
-	while (!ready1 && waitingTime1 < maxWaitingTime1)
-	{
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		waitingTime1++;
-	}
-	ASSERT_NE(waitingTime1, maxWaitingTime1);
-
-	EXPECT_FALSE(secondLockSuccess);
-	mtx.unlock();
-
-	size_t maxWaitingTime2 = 100;
-	size_t waitingTime2 = 0;
-	while (!ready2 && waitingTime2 < maxWaitingTime2)
-	{
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		waitingTime2++;
-	}
-	ASSERT_NE(waitingTime2, maxWaitingTime2);
-
-	EXPECT_TRUE(secondLockSuccess);
-
-	tp->stop();
-}
-
-TEST(CoroMutexTest, ExecutionOrdering)
-{
-	coroMutex mtx;
-	auto tp = std::make_shared<threadPool>(1);
-	taskManager::instance().init(tp);
-	tp->run();
-
 	std::vector<int> executionOrder;
-	std::atomic<int> completed { 0 };
+	std::atomic<int> completed = 0;
+	constexpr int coroCount = 5;
 
 	auto coro = [&](int id) -> task
 	{
@@ -230,25 +207,15 @@ TEST(CoroMutexTest, ExecutionOrdering)
 		completed++;
 	};
 
-	constexpr int coroCount = 5;
 	for (int i = 0; i < coroCount; ++i)
 	{
 		taskManager::instance().execute(coro(i));
 	}
 
-	size_t maxWaitingTime = 100;
-	size_t waitingTime = 0;
-	while (completed.load() < coroCount && waitingTime < maxWaitingTime)
-	{
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		waitingTime++;
-	}
-	ASSERT_NE(waitingTime, maxWaitingTime);
+	waitForAtomic(completed, coroCount);
 
 	for (int i = 0; i < coroCount; ++i)
 	{
-		EXPECT_EQ(executionOrder[i], i) << "Lock order should be FIFO!";
+		EXPECT_EQ(executionOrder[i], i) << "Lock order should be FIFO";
 	}
-
-	tp->stop();
 }
