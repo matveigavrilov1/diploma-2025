@@ -6,7 +6,6 @@
 #include <thread>
 #include <mutex>
 #include <vector>
-#include <numeric>
 
 namespace cs
 {

@@ -1,6 +1,7 @@
 #include "benchmark/atomic-counter-logger.h"
 
 #include <fstream>
+#include <numeric>
 #include <iostream>
 #include <ctime>
 #include <iomanip>
