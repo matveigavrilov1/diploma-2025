@@ -7,6 +7,7 @@
 
 REGISTER_OPTION("help", 'h', helpOption, bool, false);
 REGISTER_OPTION("threads-number", 'n', threadsNumberOption, size_t, 10);
+REGISTER_OPTION("coro-number", 'c', coroNumberOption, size_t, 5);
 REGISTER_OPTION("target", 't', targetOption, std::string, "cm");
 REGISTER_OPTION("dump-period", 'd', dumpPeriodOption, size_t, 1000);
 REGISTER_OPTION("working-time", 'w', workingTimeOption, size_t, 20);
@@ -15,6 +16,7 @@ void setUpOptions(cs::optionsParser& parser)
 {
 	parser.addOption(helpOptionName, helpOptionShortName, "Show this help message");
 	parser.addOption(threadsNumberOptionName, threadsNumberOptionShortName, "Thread pool for coro execution size", true);
+    parser.addOption(coroNumberOptionName, coroNumberOptionShortName, "Coroutines number", true);
 	parser.addOption(targetOptionName, targetOptionShortName, "Target sync prim (m - std::mutex, cm - coroMutex)", true);
 	parser.addOption(dumpPeriodOptionName, dumpPeriodOptionShortName, "Period to dump atomic counter, as ms", true);
 	parser.addOption(workingTimeOptionName, workingTimeOptionShortName, "Time to work, as seconds (inf - infinite loop)", true);
@@ -24,6 +26,7 @@ void serializeOptions(cs::optionsManager& options)
 {
 	helpOption = options.getBool(helpOptionName, helpOption);
 	threadsNumberOption = options.getUInt64(threadsNumberOptionName, threadsNumberOption);
+    coroNumberOption = options.getUInt64(coroNumberOptionName, coroNumberOption);
 	targetOption = options.getString(targetOptionName, targetOption);
 	dumpPeriodOption = options.getUInt64(dumpPeriodOptionName, dumpPeriodOption);
 	workingTimeOption = options.getUInt64(workingTimeOptionName, workingTimeOption);
@@ -42,6 +45,7 @@ std::string getLogFileName()
     std::ostringstream filenameStream;
     filenameStream << timeStream.str() << "_"
                    << "threads_" << threadsNumberOption << "_"
+                   << "coro_" << coroNumberOption << "_"
                    << "target_" << targetOption << "_"
                    << "dump_" << dumpPeriodOption << "_"
                    << "worktime_" << workingTimeOption
