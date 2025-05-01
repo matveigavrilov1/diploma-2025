@@ -41,3 +41,8 @@ void cs::coroMutex::unlock()
 		locked_.store(false);
 	}
 }
+
+std::atomic<bool>& cs::coroMutex::locked()
+{
+	return locked_;
+}
