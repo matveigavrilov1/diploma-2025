@@ -6,7 +6,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(BUILD_TEST ON)
 
+
 include(FetchContent)
+
+FetchContent_Declare(spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog
+    GIT_TAG v1.15.2) 
+FetchContent_MakeAvailable(spdlog)
+
 FetchContent_Declare(MoodyCamel
     GIT_REPOSITORY https://github.com/cameron314/concurrentqueue
     GIT_TAG v1.0.4)
