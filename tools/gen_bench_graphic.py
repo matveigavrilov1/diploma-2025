@@ -40,12 +40,10 @@ def plot_benchmark_results(filename):
 
 	plt.plot(timestamps, total, label='Total', color='black', linewidth=2, linestyle='--')
 
-	targetName = "coroMutex"
-	if params['target'] == "m":
-		targetName = "std::mutex"
+	target_name = "std::mutex" if run_params['target'] == "m" else "coroMutex"
 
 	plt.title(
-		f"Benchmark {targetName}\n"
+		f"Benchmark {target_name}\n"
 		f"Threads: {params['threads']}, Coroutines: {params['coroutines']}, "
 		f"Shared objects: {params['shared_objects']}\n"
 		f"Dump interval: {params['dump_interval_ms']}ms, "

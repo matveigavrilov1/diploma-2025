@@ -1,12 +1,14 @@
 #include <chrono>
 #include <csignal>
-#include <spdlog/spdlog.h>
 #include <memory>
 #include <optional>
 #include <string>
+#include <sys/resource.h>
 #include <thread>
 #include <iostream>
+#include <fstream>
 
+#include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
@@ -42,8 +44,13 @@ std::string getLogFileName();
 
 void initLogger();
 
+void dumpUsage(rusage& startUsage, rusage& endUsage);
+
 int main(int argc, char* argv[])
 {
+	struct rusage startUsage, endUsage;
+	getrusage(RUSAGE_SELF, &startUsage);
+
 	std::signal(SIGTERM, signalHandler);
 
 	cs::optionsParser parser;
@@ -88,7 +95,7 @@ int main(int argc, char* argv[])
 		spdlog::error("Initialization failed: {}", e.what());
 		return 1;
 	}
-	
+
 	std::mutex mtx;
 	cs::coroMutex coroMtx;
 	// workers start
@@ -130,6 +137,9 @@ int main(int argc, char* argv[])
 	running = false;
 	tp->stop();
 	counter->stop();
+
+	getrusage(RUSAGE_SELF, &endUsage);
+	dumpUsage(startUsage, endUsage);
 
 	spdlog::info("Benchmark finished successfully");
 	spdlog::shutdown();
@@ -227,5 +237,32 @@ void initLogger()
 	{
 		std::cerr << "Log initialization failed: " << ex.what() << std::endl;
 		std::exit(1);
+	}
+}
+
+void dumpUsage(rusage& startUsage, rusage& endUsage)
+{
+	int64_t userTime = (endUsage.ru_utime.tv_sec - startUsage.ru_utime.tv_sec) * INT64_C(1000000);
+	userTime += (endUsage.ru_utime.tv_usec - startUsage.ru_utime.tv_usec);
+
+	int64_t systemTime = (endUsage.ru_stime.tv_sec - startUsage.ru_stime.tv_sec) * INT64_C(1000000);
+	systemTime += (endUsage.ru_stime.tv_usec - startUsage.ru_stime.tv_usec);
+
+	spdlog::info("User Time: {} μs", userTime);
+	spdlog::info("System Time: {} μs", systemTime);
+
+	std::string filename = getLogFilesBase() + ".usage";
+	std::ofstream outfile(filename, std::ios::app);
+	if (outfile.is_open())
+	{
+		outfile << "=== Resource Usage ===" << "\n";
+		outfile << "User Time (μs): " << userTime << "\n";
+		outfile << "System Time (μs): " << systemTime << "\n";
+		outfile << "======================" << "\n\n";
+		outfile.close();
+	}
+	else
+	{
+		spdlog::error("Failed to open file {} for writing!", filename);
 	}
 }
