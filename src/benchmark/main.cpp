@@ -59,6 +59,12 @@ int main(int argc, char* argv[])
 	cs::optionsManager options(parser);
 	serializeOptions(options);
 
+	if (helpOption)
+	{
+		parser.printHelp();
+		return 0;
+	}
+
 	cs::AtomicCounterLogger counter(getLogFileName(), std::chrono::milliseconds(dumpPeriodOption));
 
 	counter.start();
