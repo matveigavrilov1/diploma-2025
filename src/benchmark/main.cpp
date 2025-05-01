@@ -39,17 +39,23 @@ REGISTER_OPTION("working-time", 'w', workingTimeOption, size_t, 20);
 void setUpOptions(cs::optionsParser& parser);
 void serializeOptions(cs::optionsManager& options);
 
+std::string getLogFilesBase();
 std::string getCounterLogFileName();
 std::string getLogFileName();
+std::string getUsageFileName();
+
+std::string logFilesBase;
 
 void initLogger();
 
-void dumpUsage(rusage& startUsage, rusage& endUsage);
+void dumpUsage(rusage& startUsage, rusage& endUsage, std::chrono::time_point<std::chrono::high_resolution_clock> start,
+	std::chrono::time_point<std::chrono::high_resolution_clock> end);
 
 int main(int argc, char* argv[])
 {
 	struct rusage startUsage, endUsage;
 	getrusage(RUSAGE_SELF, &startUsage);
+	auto start = std::chrono::high_resolution_clock::now();
 
 	std::signal(SIGTERM, signalHandler);
 
@@ -59,6 +65,7 @@ int main(int argc, char* argv[])
 	cs::optionsManager options(parser);
 	serializeOptions(options);
 
+	logFilesBase = getLogFilesBase();
 	initLogger();
 
 	spdlog::info("Parsed command line options:");
@@ -139,7 +146,9 @@ int main(int argc, char* argv[])
 	counter->stop();
 
 	getrusage(RUSAGE_SELF, &endUsage);
-	dumpUsage(startUsage, endUsage);
+	auto end = std::chrono::high_resolution_clock::now();
+
+	dumpUsage(startUsage, endUsage, start, end);
 
 	spdlog::info("Benchmark finished successfully");
 	spdlog::shutdown();
@@ -212,12 +221,17 @@ std::string getLogFilesBase()
 
 std::string getCounterLogFileName()
 {
-	return getLogFilesBase() + ".csv";
+	return logFilesBase + ".csv";
 }
 
 std::string getLogFileName()
 {
-	return getLogFilesBase() + ".log";
+	return logFilesBase + ".log";
+}
+
+std::string getUsageFileName()
+{
+	return logFilesBase + ".usage";
 }
 
 void initLogger()
@@ -240,7 +254,8 @@ void initLogger()
 	}
 }
 
-void dumpUsage(rusage& startUsage, rusage& endUsage)
+void dumpUsage(rusage& startUsage, rusage& endUsage, std::chrono::time_point<std::chrono::high_resolution_clock> start,
+	std::chrono::time_point<std::chrono::high_resolution_clock> end)
 {
 	int64_t userTime = (endUsage.ru_utime.tv_sec - startUsage.ru_utime.tv_sec) * INT64_C(1000000);
 	userTime += (endUsage.ru_utime.tv_usec - startUsage.ru_utime.tv_usec);
@@ -248,14 +263,19 @@ void dumpUsage(rusage& startUsage, rusage& endUsage)
 	int64_t systemTime = (endUsage.ru_stime.tv_sec - startUsage.ru_stime.tv_sec) * INT64_C(1000000);
 	systemTime += (endUsage.ru_stime.tv_usec - startUsage.ru_stime.tv_usec);
 
+	auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+	int64_t wallTime = duration.count();
+
+	spdlog::info("Wall Time: {} μs", wallTime);
 	spdlog::info("User Time: {} μs", userTime);
 	spdlog::info("System Time: {} μs", systemTime);
 
-	std::string filename = getLogFilesBase() + ".usage";
+	std::string filename = getUsageFileName();
 	std::ofstream outfile(filename, std::ios::app);
 	if (outfile.is_open())
 	{
 		outfile << "=== Resource Usage ===" << "\n";
+		outfile << "Wall Time (μs): " << wallTime << "\n";
 		outfile << "User Time (μs): " << userTime << "\n";
 		outfile << "System Time (μs): " << systemTime << "\n";
 		outfile << "======================" << "\n\n";

@@ -24,13 +24,15 @@ def parse_usage_file(filename):
 	with open(filename, 'r') as file:
 		content = file.read()
 
+	wall_time = user_time = re.search(r'Wall Time \(μs\): (\d+)', content)
 	user_time = re.search(r'User Time \(μs\): (\d+)', content)
 	system_time = re.search(r'System Time \(μs\): (\d+)', content)
 
-	if not user_time or not system_time:
+	if not wall_time or not user_time or not system_time:
 		return None
 
 	return {
+		'wall_time': int(wall_time.group(1)),
 		'user_time': int(user_time.group(1)),
 		'system_time': int(system_time.group(1))
 	}
@@ -47,8 +49,8 @@ def plot_usage_results(filename):
 		return
 
 	df = pd.DataFrame({
-		'Metric': ['User Time', 'System Time'],
-		'Time (μs)': [usage_data['user_time'], usage_data['system_time']]
+		'Metric': ['Wall Time', 'User Time', 'System Time'],
+		'Time (μs)': [usage_data['wall_time'], usage_data['user_time'], usage_data['system_time']]
 	})
 
 	plt.figure(figsize=(10, 6))
@@ -83,7 +85,7 @@ def plot_usage_results(filename):
 
 if __name__ == "__main__":
 	if len(sys.argv) != 2:
-		print("Usage: python plot_usage.py <input_filename.usage>")
+		print("Usage: python gen_bench_usage_diagram.py <input_filename.usage>")
 		sys.exit(1)
 
 	input_filename = sys.argv[1]
