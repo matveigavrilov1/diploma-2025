@@ -5,38 +5,38 @@
 #include <string>
 #include <thread>
 #include <mutex>
+#include <vector>
+#include <numeric>
 
 namespace cs
 {
 
-class AtomicCounterLogger
+class atomicCounterLogger
 {
 public:
-	AtomicCounterLogger(const std::string& filename, std::chrono::milliseconds interval);
-	~AtomicCounterLogger();
+	atomicCounterLogger(const std::string& filename, std::chrono::milliseconds interval, size_t counter_count = 1);
+	~atomicCounterLogger();
 
-	AtomicCounterLogger(const AtomicCounterLogger&) = delete;
-	AtomicCounterLogger& operator= (const AtomicCounterLogger&) = delete;
+	atomicCounterLogger(const atomicCounterLogger&) = delete;
+	atomicCounterLogger& operator= (const atomicCounterLogger&) = delete;
 
 	void start();
 	void stop();
-	void increment();
-	void decrement();
+	void increment(size_t counter_index = 0);
+	void decrement(size_t counter_index = 0);
 
-	AtomicCounterLogger& operator++ ();
-	AtomicCounterLogger& operator-- ();
-
-	int64_t get() const;
+	int64_t get(size_t counter_index = 0) const;
+	int64_t get_total() const;
 
 private:
 	void worker();
-	void dump_counter();
+	void dump();
 
-	std::atomic<int64_t> counter_;
+	std::vector<std::atomic<int64_t>> counters_;
 	std::string filename_;
 	std::chrono::milliseconds interval_;
-	std::thread worker_thread_;
+	std::thread worker_;
 	std::atomic<bool> running_;
-	std::mutex file_mutex_;
+	std::mutex mtx_;
 };
 } // namespace cs

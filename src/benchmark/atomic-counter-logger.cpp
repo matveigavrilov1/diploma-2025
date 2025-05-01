@@ -1,5 +1,3 @@
-
-
 #include "benchmark/atomic-counter-logger.h"
 
 #include <fstream>
@@ -9,79 +7,87 @@
 
 using namespace cs;
 
-AtomicCounterLogger::AtomicCounterLogger(const std::string& filename, std::chrono::milliseconds interval)
-: counter_(0)
+atomicCounterLogger::atomicCounterLogger(const std::string& filename, std::chrono::milliseconds interval, size_t counter_count)
+: counters_(counter_count)
 , filename_(filename)
 , interval_(interval)
 , running_(false)
-{ }
+{
+	for (auto& counter : counters_)
+	{
+		counter.store(0, std::memory_order_relaxed);
+	}
+}
 
-AtomicCounterLogger::~AtomicCounterLogger()
+atomicCounterLogger::~atomicCounterLogger()
 {
 	stop();
 }
 
-void AtomicCounterLogger::start()
+void atomicCounterLogger::start()
 {
 	if (running_)
 		return;
 
 	running_ = true;
-	worker_thread_ = std::thread(&AtomicCounterLogger::worker, this);
+	worker_ = std::thread(&atomicCounterLogger::worker, this);
 }
 
-void AtomicCounterLogger::stop()
+void atomicCounterLogger::stop()
 {
 	running_ = false;
-	if (worker_thread_.joinable())
+	if (worker_.joinable())
 	{
-		worker_thread_.join();
+		worker_.join();
 	}
-	dump_counter();
+	dump();
 }
 
-void AtomicCounterLogger::increment()
+void atomicCounterLogger::increment(size_t counter_index)
 {
-	counter_.fetch_add(1, std::memory_order_relaxed);
+	if (counter_index >= counters_.size())
+	{
+		return;
+	}
+	counters_[counter_index].fetch_add(1, std::memory_order_relaxed);
 }
 
-void AtomicCounterLogger::decrement()
+void atomicCounterLogger::decrement(size_t counter_index)
 {
-	counter_.fetch_sub(1, std::memory_order_relaxed);
+	if (counter_index >= counters_.size())
+	{
+		return;
+	}
+	counters_[counter_index].fetch_sub(1, std::memory_order_relaxed);
 }
 
-// Префиксный инкремент
-AtomicCounterLogger& AtomicCounterLogger::operator++ ()
+int64_t atomicCounterLogger::get(size_t counter_index) const
 {
-	counter_.fetch_add(1, std::memory_order_relaxed);
-	return *this;
+	if (counter_index >= counters_.size())
+	{
+		return 0;
+	}
+	return counters_[counter_index].load(std::memory_order_relaxed);
 }
 
-// Префиксный декремент
-AtomicCounterLogger& AtomicCounterLogger::operator-- ()
+int64_t atomicCounterLogger::get_total() const
 {
-	counter_.fetch_sub(1, std::memory_order_relaxed);
-	return *this;
+	return std::accumulate(counters_.begin(), counters_.end(), int64_t { 0 },
+		[](int64_t sum, const std::atomic<int64_t>& counter) { return sum + counter.load(std::memory_order_relaxed); });
 }
 
-
-int64_t AtomicCounterLogger::get() const
-{
-	return counter_.load(std::memory_order_relaxed);
-}
-
-void AtomicCounterLogger::worker()
+void atomicCounterLogger::worker()
 {
 	while (running_)
 	{
 		std::this_thread::sleep_for(interval_);
-		dump_counter();
+		dump();
 	}
 }
 
-void AtomicCounterLogger::dump_counter()
+void atomicCounterLogger::dump()
 {
-	std::lock_guard<std::mutex> lock(file_mutex_);
+	std::lock_guard<std::mutex> lock(mtx_);
 
 	auto now = std::chrono::system_clock::now();
 	std::time_t now_time = std::chrono::system_clock::to_time_t(now);
@@ -89,7 +95,18 @@ void AtomicCounterLogger::dump_counter()
 	std::ofstream out(filename_, std::ios_base::app);
 	if (out.is_open())
 	{
-		out << std::put_time(std::localtime(&now_time), "%Y-%m-%d %H:%M:%S") << "," << get() << "\n";
+		out << std::put_time(std::localtime(&now_time), "%Y-%m-%d %H:%M:%S") << ",";
+
+		// Записываем каждый счетчик
+		for (size_t i = 0; i < counters_.size(); ++i)
+		{
+			if (i != 0)
+				out << ",";
+			out << get(i);
+		}
+
+		// И общую сумму
+		out << "," << get_total() << "\n";
 	}
 	else
 	{

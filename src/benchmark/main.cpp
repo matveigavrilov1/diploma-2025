@@ -73,13 +73,13 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	cs::AtomicCounterLogger counter(getLogFileName(), std::chrono::milliseconds(dumpPeriodOption));
+	cs::atomicCounterLogger counter(getLogFileName(), std::chrono::milliseconds(dumpPeriodOption), sharedNumberOption);
 
 	counter.start();
 
 	for (int i = 0; i < 20; ++i)
 	{
-		++counter;
+		counter.increment(i % sharedNumberOption);
 		std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
 
