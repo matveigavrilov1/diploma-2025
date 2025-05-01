@@ -1,15 +1,22 @@
 #include <chrono>
 #include <csignal>
 #include <optional>
+#include <memory>
 #include <string>
+#include <thread>
 
 #include "benchmark/atomic-counter-logger.h"
+#include "benchmark/coro.h"
+
+#include "core/coro-mutex.h"
+#include "core/task-manager.h"
 #include "core/thread-pool.h"
+
 #include "optionsManager/options-manager.h"
 #include "optionsManager/register-option.h"
 
 std::atomic<bool> running { true };
-std::optional<cs::threadPool> tp;
+std::shared_ptr<cs::threadPool> tp;
 std::optional<cs::atomicCounterLogger> counter;
 
 void signalHandler(int signal)
@@ -25,6 +32,7 @@ void signalHandler(int signal)
 		{
 			counter->stop();
 		}
+		std::exit(0);
 	}
 }
 
@@ -100,11 +108,39 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
+	// initialization
 	counter.emplace(getLogFileName(), std::chrono::milliseconds(dumpPeriodOption), sharedNumberOption);
-	tp.emplace(threadsNumberOption);
+	tp = std::make_shared<cs::threadPool>(sharedNumberOption);
+	cs::taskManager::instance().init(tp);
 
+	// targets
+	std::mutex mtx;
+	cs::coroMutex coroMtx;
+
+	// coroutines start
+	for (size_t i = 0; i < coroNumberOption; ++i)
+	{
+		if (targetOption == "m")
+		{
+			cs::taskManager::instance().execute(coroutine(*counter, i % sharedNumberOption, running, mtx));
+		}
+		else
+		{
+			cs::taskManager::instance().execute(coroutine(*counter, i % sharedNumberOption, running, coroMtx));
+		}
+	}
+
+	// workers start
 	counter->start();
-    tp->start();
+	tp->start();
+
+    // waiting
+	std::this_thread::sleep_for(std::chrono::seconds(workingTimeOption));
+
+	// finish
+	running = false;
+	tp->stop();
+	counter->stop();
 
 	return 0;
 }
