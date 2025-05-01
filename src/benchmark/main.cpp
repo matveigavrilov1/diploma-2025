@@ -44,20 +44,15 @@ void initLogger();
 
 int main(int argc, char* argv[])
 {
-	initLogger();
-
-	spdlog::info("Benchmark started");
-	// signal handling
-	spdlog::debug("Setting up signal handlers");
 	std::signal(SIGTERM, signalHandler);
 
-	// options parsing
-	spdlog::debug("Parsing command line options");
 	cs::optionsParser parser;
 	setUpOptions(parser);
 	parser.parse(argc, argv);
 	cs::optionsManager options(parser);
 	serializeOptions(options);
+
+	initLogger();
 
 	spdlog::info("Parsed command line options:");
 	spdlog::info("  help: {}", helpOption);
