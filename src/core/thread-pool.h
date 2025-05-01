@@ -13,7 +13,7 @@ class threadPool
 public:
 	explicit threadPool(size_t workersCount = 1);
 
-	void run();
+	void start();
 	void stop();
 
 	using task_t = std::function<void()>;

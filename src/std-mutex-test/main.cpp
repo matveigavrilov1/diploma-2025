@@ -27,7 +27,7 @@ int main()
 	auto tp = std::make_shared<cs::threadPool>(THREAD_COUNT);
 	cs::taskManager::instance().init(tp);
 
-	tp->run();
+	tp->start();
 	for (size_t i = 0; i < PROD_COUNT; ++i)
 	{
 		cs::taskManager::instance().execute(producer(x, i));

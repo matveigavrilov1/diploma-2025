@@ -1,9 +1,32 @@
 #include <chrono>
+#include <csignal>
+#include <optional>
 #include <string>
 
 #include "benchmark/atomic-counter-logger.h"
+#include "core/thread-pool.h"
 #include "optionsManager/options-manager.h"
 #include "optionsManager/register-option.h"
+
+std::atomic<bool> running { true };
+std::optional<cs::threadPool> tp;
+std::optional<cs::atomicCounterLogger> counter;
+
+void signalHandler(int signal)
+{
+	if (signal == SIGTERM)
+	{
+		running = false;
+		if (tp)
+		{
+			tp->stop();
+		}
+		if (counter)
+		{
+			counter->stop();
+		}
+	}
+}
 
 REGISTER_OPTION("help", 'h', helpOption, bool, false);
 REGISTER_OPTION("threads-number", 'n', threadsNumberOption, size_t, 10);
@@ -61,6 +84,10 @@ std::string getLogFileName()
 
 int main(int argc, char* argv[])
 {
+	// signal handling
+	std::signal(SIGTERM, signalHandler);
+
+	// options parsing
 	cs::optionsParser parser;
 	setUpOptions(parser);
 	parser.parse(argc, argv);
@@ -73,16 +100,11 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	cs::atomicCounterLogger counter(getLogFileName(), std::chrono::milliseconds(dumpPeriodOption), sharedNumberOption);
+	counter.emplace(getLogFileName(), std::chrono::milliseconds(dumpPeriodOption), sharedNumberOption);
+	tp.emplace(threadsNumberOption);
 
-	counter.start();
+	counter->start();
+    tp->start();
 
-	for (int i = 0; i < 20; ++i)
-	{
-		counter.increment(i % sharedNumberOption);
-		std::this_thread::sleep_for(std::chrono::seconds(1));
-	}
-
-	counter.stop();
 	return 0;
 }

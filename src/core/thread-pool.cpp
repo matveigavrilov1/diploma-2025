@@ -6,7 +6,7 @@ threadPool::threadPool(size_t workersCount)
 : workersCount_(workersCount)
 { }
 
-void threadPool::run()
+void threadPool::start()
 {
 	workers_.clear();
 	running_ = true;

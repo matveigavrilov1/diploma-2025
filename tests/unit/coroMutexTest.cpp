@@ -60,7 +60,7 @@ protected:
 	{
 		tp = std::make_shared<threadPool>(1);
 		taskManager::instance().init(tp);
-		tp->run();
+		tp->start();
 	}
 
 	void TearDown() override { tp->stop(); }
@@ -145,7 +145,7 @@ protected:
 	{
 		tp = std::make_shared<threadPool>(10);
 		taskManager::instance().init(tp);
-		tp->run();
+		tp->start();
 	}
 
 	void TearDown() override { tp->stop(); }
