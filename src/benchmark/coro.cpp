@@ -1,9 +1,8 @@
 #include "benchmark/coro.h"
 #include <chrono>
-#include <coroutine>
 #include <thread>
 
-cs::task coroutine(cs::atomicCounterLogger& counter, size_t id, std::atomic<bool>& running, cs::coroMutex& mtx)
+cs::task coroutine(cs::atomicMultipleCounter& counter, size_t id, std::atomic<bool>& running, cs::coroMutex& mtx)
 {
 	while (running)
 	{
@@ -14,7 +13,7 @@ cs::task coroutine(cs::atomicCounterLogger& counter, size_t id, std::atomic<bool
 	}
 }
 
-cs::task coroutine(cs::atomicCounterLogger& counter, size_t id, std::atomic<bool>& running, std::mutex& mtx)
+cs::task coroutine(cs::atomicMultipleCounter& counter, size_t id, std::atomic<bool>& running, std::mutex& mtx)
 {
 	while (running)
 	{

@@ -12,7 +12,8 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-#include "benchmark/atomic-counter-logger.h"
+#include "benchmark/counter/atomic-multiple-counter.h"
+#include "benchmark/counter/counter-dumper.h"
 #include "benchmark/coro.h"
 
 #include "core/coro-mutex.h"
@@ -24,7 +25,8 @@
 
 std::atomic<bool> running { true };
 std::shared_ptr<cs::threadPool> tp;
-std::optional<cs::atomicCounterLogger> counter;
+std::optional<cs::atomicMultipleCounter> counter;
+std::optional<cs::counterDumper> counterDumper;
 
 void signalHandler(int signal);
 
@@ -90,8 +92,11 @@ int main(int argc, char* argv[])
 	spdlog::info("Initializing components");
 	try
 	{
-		counter.emplace(getCounterLogFilePath(), std::chrono::milliseconds(dumpPeriodOption), sharedNumberOption);
-		spdlog::debug("Counter initialized with dump period: {} ms, and shared objects number: {}", dumpPeriodOption, sharedNumberOption);
+		counter.emplace( sharedNumberOption);
+		spdlog::debug("Counter initialized with shared objects number: {}", sharedNumberOption);
+
+		counterDumper.emplace(*counter, getCounterLogFilePath(), std::chrono::milliseconds(dumpPeriodOption));
+		spdlog::debug("Counter initialized with dump period: {} ms, and filepath: {}", dumpPeriodOption, getCounterLogFilePath());
 
 		tp = std::make_shared<cs::threadPool>(threadsNumberOption);
 		spdlog::debug("Thread pool initialized with {} threads", threadsNumberOption);
@@ -108,7 +113,7 @@ int main(int argc, char* argv[])
 	std::mutex mtx;
 	cs::coroMutex coroMtx;
 	// workers start
-	counter->start();
+	counterDumper->start();
 
 	spdlog::info("Starting {} threads", threadsNumberOption);
 	tp->start();
@@ -145,7 +150,7 @@ int main(int argc, char* argv[])
 	spdlog::info("Shutting down");
 	running = false;
 	tp->stop();
-	counter->stop();
+	counterDumper->stop();
 
 	getrusage(RUSAGE_SELF, &endUsage);
 	auto end = std::chrono::high_resolution_clock::now();
@@ -170,7 +175,7 @@ void signalHandler(int signal)
 		}
 		if (counter)
 		{
-			counter->stop();
+			counterDumper->stop();
 		}
 		std::exit(0);
 	}

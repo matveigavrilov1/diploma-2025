@@ -3,8 +3,9 @@ cmake_minimum_required(VERSION 3.10.0)
 set(BENCHMARK_TARGET_NAME coroMutexBenchmark)
 
 set(BENCHMARK_SOURCES
-        atomic-counter-logger.cpp
         coro.cpp
+		counter/atomic-multiple-counter.cpp
+		counter/counter-dumper.cpp
         optionsManager/options-parser.cpp
         optionsManager/options-manager.cpp
     )
