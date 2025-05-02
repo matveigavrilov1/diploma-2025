@@ -5,8 +5,9 @@ import sys
 import os
 
 def parse_filename(filename):
+	basename = os.path.basename(filename)
 	pattern = r'(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_threads_(\d+)_coro_(\d+)_shared_(\d+)_target_(\w+)_dump_(\d+)_worktime_(\d+)\.usage'
-	match = re.match(pattern, filename)
+	match = re.match(pattern, basename)
 	if not match:
 		return None
 
@@ -57,16 +58,17 @@ def parse_usage_file(filename):
 	with open(filename, 'r') as file:
 		content = file.read()
 
+	wall_time = user_time = re.search(r'Wall Time \(μs\): (\d+)', content)
 	user_time = re.search(r'User Time \(μs\): (\d+)', content)
 	system_time = re.search(r'System Time \(μs\): (\d+)', content)
 
-	if not user_time or not system_time:
+	if not wall_time or not user_time or not system_time:
 		return None
 
 	return {
+		'wall_time': int(wall_time.group(1)),
 		'user_time': int(user_time.group(1)),
-		'system_time': int(system_time.group(1)),
-		'total_time': int(user_time.group(1)) + int(system_time.group(1))
+		'system_time': int(system_time.group(1))
 	}
 
 def plot_usage_comparison(filename):
@@ -87,9 +89,9 @@ def plot_usage_comparison(filename):
 		print("Failed to parse usage data from one of the files")
 		return
 
-	metrics = ['User Time', 'System Time', 'Total Time']
-	main_values = [main_data['user_time'], main_data['system_time'], main_data['total_time']]
-	pair_values = [pair_data['user_time'], pair_data['system_time'], pair_data['total_time']]
+	metrics = ['Wall Time', 'User Time', 'System Time']
+	main_values = [main_data['wall_time'], main_data['user_time'], main_data['system_time']]
+	pair_values = [pair_data['wall_time'], pair_data['user_time'], pair_data['system_time']]
 
 	# Determine which is which
 	main_target = "std::mutex" if run_params['target'] == "m" else "coroMutex"

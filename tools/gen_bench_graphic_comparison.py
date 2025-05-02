@@ -6,8 +6,9 @@ import sys
 import os
 
 def parse_filename(filename):
+	basename = os.path.basename(filename)
 	pattern = r'(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_threads_(\d+)_coro_(\d+)_shared_(\d+)_target_(\w+)_dump_(\d+)_worktime_(\d+)\.csv'
-	match = re.match(pattern, filename)
+	match = re.match(pattern, basename)
 	if not match:
 		return None
 

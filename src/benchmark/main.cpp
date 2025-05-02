@@ -35,14 +35,16 @@ REGISTER_OPTION("shared-number", 's', sharedNumberOption, size_t, 1);
 REGISTER_OPTION("target", 't', targetOption, std::string, "cm");
 REGISTER_OPTION("dump-period", 'd', dumpPeriodOption, size_t, 1000);
 REGISTER_OPTION("working-time", 'w', workingTimeOption, size_t, 20);
+REGISTER_OPTION("output-dir", 'o', outputDirOption, std::string, ".");
+
 
 void setUpOptions(cs::optionsParser& parser);
 void serializeOptions(cs::optionsManager& options);
 
 std::string getLogFilesBase();
-std::string getCounterLogFileName();
-std::string getLogFileName();
-std::string getUsageFileName();
+std::string getCounterLogFilePath();
+std::string getLogFilePath();
+std::string getUsageFilePath();
 
 std::string logFilesBase;
 
@@ -88,7 +90,7 @@ int main(int argc, char* argv[])
 	spdlog::info("Initializing components");
 	try
 	{
-		counter.emplace(getCounterLogFileName(), std::chrono::milliseconds(dumpPeriodOption), sharedNumberOption);
+		counter.emplace(getCounterLogFilePath(), std::chrono::milliseconds(dumpPeriodOption), sharedNumberOption);
 		spdlog::debug("Counter initialized with dump period: {} ms, and shared objects number: {}", dumpPeriodOption, sharedNumberOption);
 
 		tp = std::make_shared<cs::threadPool>(threadsNumberOption);
@@ -183,6 +185,7 @@ void setUpOptions(cs::optionsParser& parser)
 	parser.addOption(targetOptionName, targetOptionShortName, "Target sync prim (m - std::mutex, cm - coroMutex)", true);
 	parser.addOption(dumpPeriodOptionName, dumpPeriodOptionShortName, "Period to dump atomic counter, as ms", true);
 	parser.addOption(workingTimeOptionName, workingTimeOptionShortName, "Time to work, as seconds (inf - infinite loop)", true);
+	parser.addOption(outputDirOptionName, outputDirOptionShortName, "Time to work, as seconds (inf - infinite loop)", true);
 }
 
 void serializeOptions(cs::optionsManager& options)
@@ -194,6 +197,7 @@ void serializeOptions(cs::optionsManager& options)
 	targetOption = options.getString(targetOptionName, targetOption);
 	dumpPeriodOption = options.getUInt64(dumpPeriodOptionName, dumpPeriodOption);
 	workingTimeOption = options.getUInt64(workingTimeOptionName, workingTimeOption);
+	outputDirOption = options.getString(outputDirOptionName, outputDirOption);
 }
 
 std::string getLogFilesBase()
@@ -219,19 +223,19 @@ std::string getLogFilesBase()
 	return filenameStream.str();
 }
 
-std::string getCounterLogFileName()
+std::string getCounterLogFilePath()
 {
-	return logFilesBase + ".csv";
+	return outputDirOption + "/" + logFilesBase + ".csv";
 }
 
-std::string getLogFileName()
+std::string getLogFilePath()
 {
-	return logFilesBase + ".log";
+	return outputDirOption + "/" + logFilesBase + ".log";
 }
 
-std::string getUsageFileName()
+std::string getUsageFilePath()
 {
-	return logFilesBase + ".usage";
+	return outputDirOption + "/" + logFilesBase + ".usage";
 }
 
 void initLogger()
@@ -239,7 +243,7 @@ void initLogger()
 	try
 	{
 		auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-		auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(getLogFileName(), true);
+		auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(getLogFilePath(), true);
 
 		std::vector<spdlog::sink_ptr> sinks { console_sink, file_sink };
 		auto logger = std::make_shared<spdlog::logger>("main", begin(sinks), end(sinks));
@@ -270,7 +274,7 @@ void dumpUsage(rusage& startUsage, rusage& endUsage, std::chrono::time_point<std
 	spdlog::info("User Time: {} μs", userTime);
 	spdlog::info("System Time: {} μs", systemTime);
 
-	std::string filename = getUsageFileName();
+	std::string filename = getUsageFilePath();
 	std::ofstream outfile(filename, std::ios::app);
 	if (outfile.is_open())
 	{
