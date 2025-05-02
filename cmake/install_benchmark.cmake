@@ -13,6 +13,7 @@ install(
 		tools/gen_bench_graphic.py
 		tools/gen_bench_usage_diagram_comparison.py
 		tools/gen_bench_usage_diagram.py
+		tools/gen_summary.py
 		tools/run_benchmark.sh
 		tools/run.sh
 		tools/setup_benchmark_venv.sh

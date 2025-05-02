@@ -20,7 +20,7 @@ echo "Activating virtual environment..."
 source ${BENCH_VENV_DIR}/bin/activate || { echo "Failed to activate virtual environment"; exit 1; }
 
 echo "Installing dependencies.."
-pip install pandas matplotlib
+pip install pandas matplotlib seaborn
 
 echo "Success"
 echo "Use 'source ${BENCH_VENV_DIR}/bin/activate' to activate venv."

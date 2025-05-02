@@ -15,3 +15,9 @@ for n in "${n_values[@]}"; do
 		done
 	done
 done
+
+source .venv_bench/bin/activate
+
+python gen_summary.py
+
+deactivate
