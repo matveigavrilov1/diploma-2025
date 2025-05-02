@@ -18,8 +18,6 @@ if [ -z "$CORO" ] || [ -z "$DUMP" ] || [ -z "$SHARED" ] || [ -z "$THREADS" ] || 
   exit 1
 fi
 
-./setup_benchmark_venv.sh
-
 mkdir -p runs
 
 ./coroMutexBenchmark -c "$CORO" -d "$DUMP" -s "$SHARED" -t cm -n "$THREADS" -w "$WORKTIME" -o runs 
@@ -30,7 +28,6 @@ latest_cm_usage_file=$(find runs -name "*.usage" -type f -printf "%T@ %p\n" | so
 latest_m_file=$(find runs -name "*.csv" -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
 latest_m_usage_file=$(find runs -name "*.usage" -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
 
-# Генерируем графики
 source .venv_bench/bin/activate
 
 python gen_bench_graphic.py "$latest_cm_file"
