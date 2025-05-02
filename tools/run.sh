@@ -1,23 +1,15 @@
 #!/bin/bash
 
-./run_benchmark.sh -c 1 -d 100 -s 1 -n 1 -w 5
+n_values=(1 5 10 15 100)
+c_values=(1 5 10 15 100)
+s_values=(1 5 10 15 100)
+w_value=5
+d_value=100
 
-./run_benchmark.sh -c 5 -d 100 -s 1 -n 1 -w 5
-./run_benchmark.sh -c 5 -d 100 -s 1 -n 10 -w 5
-./run_benchmark.sh -c 10 -d 100 -s 1 -n 10 -w 5
-./run_benchmark.sh -c 15 -d 100 -s 1 -n 10 -w 5
-
-./run_benchmark.sh -c 5 -d 100 -s 5 -n 1 -w 5
-./run_benchmark.sh -c 5 -d 100 -s 5 -n 10 -w 5
-./run_benchmark.sh -c 10 -d 100 -s 5 -n 10 -w 5
-./run_benchmark.sh -c 15 -d 100 -s 5 -n 10 -w 5
-
-./run_benchmark.sh -c 5 -d 100 -s 10 -n 1 -w 5
-./run_benchmark.sh -c 5 -d 100 -s 10 -n 10 -w 5
-./run_benchmark.sh -c 10 -d 100 -s 10 -n 10 -w 5
-./run_benchmark.sh -c 15 -d 100 -s 10 -n 10 -w 5
-
-./run_benchmark.sh -c 5 -d 100 -s 15 -n 1 -w 5
-./run_benchmark.sh -c 5 -d 100 -s 15 -n 10 -w 5
-./run_benchmark.sh -c 10 -d 100 -s 15 -n 10 -w 5
-./run_benchmark.sh -c 15 -d 100 -s 15 -n 10 -w 5
+for n in "${n_values[@]}"; do
+	for c in "${c_values[@]}"; do
+		for s in "${s_values[@]}"; do
+			./run_benchmark.sh -n "$n" -c "$c" -s "$s" -w "$w_value" -d "$d_value"
+		done
+	done
+done
