@@ -1,6 +1,6 @@
 #!/bin/bash
 
-n_values=(1 5 10 15 100)
+n_values=(1 2 4 8 16 32)
 c_values=(1 5 10 15 100)
 s_values=(1 5 10 15 100)
 w_value=5

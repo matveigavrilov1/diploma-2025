@@ -10,6 +10,7 @@ cs::task coroutine(cs::atomicMultipleCounter& counter, size_t id, std::atomic<bo
 		counter.increment(id);
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		mtx.unlock();
+		// co_await std::suspend_always {};
 	}
 }
 
@@ -21,6 +22,7 @@ cs::task coroutine(cs::atomicMultipleCounter& counter, size_t id, std::atomic<bo
 		counter.increment(id);
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		mtx.unlock();
+		// co_await std::suspend_always {};
 	}
 	co_return;
 }
