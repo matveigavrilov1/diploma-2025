@@ -1,16 +1,32 @@
 #!/bin/bash
 
+while getopts "c:d:s:n:w:" opt; do
+  case $opt in
+    c) CORO=$OPTARG ;;
+    d) DUMP=$OPTARG ;;
+    s) SHARED=$OPTARG ;;
+    n) THREADS=$OPTARG ;;
+    w) WORKTIME=$OPTARG ;;
+    *) echo "Usage: $0 -c coro -d dump -s shared -n threads -w worktime" >&2
+       exit 1 ;;
+  esac
+done
+
+if [ -z "$CORO" ] || [ -z "$DUMP" ] || [ -z "$SHARED" ] || [ -z "$THREADS" ] || [ -z "$WORKTIME" ]; then
+  echo "All parameters (-c, -d, -s, -n, -w) are required"
+  echo "Usage: $0 -c coro -d dump -s shared -n threads -w worktime"
+  exit 1
+fi
+
 ./setup_benchmark_venv.sh
 
-# Создаем директорию runs, если ее нет
 mkdir -p runs
 
-# Запускаем бенчмарки
-./coroMutexBenchmark -c 100 -d 100 -s 10 -t cm -n 5 -w 5 -o runs 
+./coroMutexBenchmark -c "$CORO" -d "$DUMP" -s "$SHARED" -t cm -n "$THREADS" -w "$WORKTIME" -o runs 
 latest_cm_file=$(find runs -name "*.csv" -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
 latest_cm_usage_file=$(find runs -name "*.usage" -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
 
-./coroMutexBenchmark -c 100 -d 100 -s 10 -t m -n 5 -w 5 -o runs
+./coroMutexBenchmark -c "$CORO" -d "$DUMP" -s "$SHARED" -t m -n "$THREADS" -w "$WORKTIME" -o runs
 latest_m_file=$(find runs -name "*.csv" -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
 latest_m_usage_file=$(find runs -name "*.usage" -type f -printf "%T@ %p\n" | sort -n | tail -1 | cut -d' ' -f2-)
 
@@ -26,7 +42,6 @@ python gen_bench_usage_diagram_comparison.py "$latest_cm_usage_file"
 
 deactivate
 
-# Функция для получения имени папки (без даты, расширения и target_*)
 get_basename() {
     local filename=$(basename "$1")
     # Удаляем дату в формате YYYY-MM-DD_HH-MM-SS
@@ -36,13 +51,10 @@ get_basename() {
     echo "$no_target"
 }
 
-# Создаем папку для результатов (например, было "threads_5_coro_100_shared_10_target_cm_dump_100_worktime_5",
-# станет "threads_5_coro_100_shared_10_dump_100_worktime_5")
 result_dir_name=$(get_basename "$latest_cm_file")
 result_dir="runs/$result_dir_name"
 mkdir -p "$result_dir"
 
-# Перемещаем все файлы в папку результатов
 mv runs/*.csv "$result_dir/" 2>/dev/null || true
 mv runs/*.usage "$result_dir/" 2>/dev/null || true
 mv runs/*.png "$result_dir/" 2>/dev/null || true

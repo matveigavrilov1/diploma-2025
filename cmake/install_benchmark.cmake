@@ -14,6 +14,7 @@ install(
 		tools/gen_bench_usage_diagram_comparison.py
 		tools/gen_bench_usage_diagram.py
 		tools/run_benchmark.sh
+		tools/run.sh
 		tools/setup_benchmark_venv.sh
 	DESTINATION ${BENCHMARK_INSTALL_DIR}
 	PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
