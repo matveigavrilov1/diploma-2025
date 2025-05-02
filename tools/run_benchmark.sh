@@ -52,7 +52,10 @@ result_dir_name=$(get_basename "$latest_cm_file")
 result_dir="runs/$result_dir_name"
 mkdir -p "$result_dir"
 
-mv runs/*.csv "$result_dir/" 2>/dev/null || true
-mv runs/*.usage "$result_dir/" 2>/dev/null || true
-mv runs/*.png "$result_dir/" 2>/dev/null || true
-mv runs/*.log "$result_dir/" 2>/dev/null || true
+mkdir -p "$result_dir/img"
+mkdir -p "$result_dir/res"
+
+mv runs/*.csv "$result_dir/res/" 2>/dev/null || true
+mv runs/*.usage "$result_dir/res/" 2>/dev/null || true
+mv runs/*.log "$result_dir/res/" 2>/dev/null || true
+mv runs/*.png "$result_dir/img/" 2>/dev/null || true
