@@ -157,11 +157,51 @@ def create_enhanced_summary(df):
 
 	return pivot_df.sort_values(['threads', 'shared', 'coro'])
 
+def create_combined_heatmaps(raw_df, output_dir="plots"):
+	"""Create side-by-side heatmaps with identical color scales"""
+	if not os.path.exists(output_dir):
+		os.makedirs(output_dir)
+
+	# Filter data
+	m_df = raw_df[raw_df['target'] == 'm']
+	cm_df = raw_df[raw_df['target'] == 'cm']
+
+	# Calculate global min/max for consistent scaling
+	global_min = min(m_df['total_sum'].min(), cm_df['total_sum'].min())
+	global_max = max(m_df['total_sum'].max(), cm_df['total_sum'].max())
+
+	# Create subplots
+	fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+	fig.suptitle('Сравнение производительности: std::mutex vs coroMutex', fontsize=16)
+
+	# Heatmap for std::mutex
+	pivot_m = m_df.pivot_table(index='threads', columns='shared', 
+								values='total_sum', aggfunc='mean')
+	sns.heatmap(pivot_m, annot=True, fmt=".0f", cmap="YlGnBu", 
+				vmin=global_min, vmax=global_max, ax=ax1)
+	ax1.set_title('std::mutex (общее количество операций)')
+	ax1.set_xlabel('Общие ресурсы')
+	ax1.set_ylabel('Потоки')
+
+	# Heatmap for coroMutex
+	pivot_cm = cm_df.pivot_table(index='threads', columns='shared', 
+								values='total_sum', aggfunc='mean')
+	sns.heatmap(pivot_cm, annot=True, fmt=".0f", cmap="YlGnBu", 
+				vmin=global_min, vmax=global_max, ax=ax2)
+	ax2.set_title('coroMutex (общее количество операций)')
+	ax2.set_xlabel('Общие ресурсы')
+	ax2.set_ylabel('')
+
+	plt.tight_layout()
+	plt.savefig(f"{output_dir}/combined_heatmaps_normalized.png", bbox_inches='tight')
+	plt.close()
+
 def create_combined_plots(summary_df, raw_df, output_dir="plots"):
 	"""Create all visualization plots"""
 	if not os.path.exists(output_dir):
 		os.makedirs(output_dir)
 
+	create_combined_heatmaps(raw_df, output_dir)
 	# 1. Performance comparison with error bars
 	plt.figure(figsize=(14, 7))
 	sns.barplot(x='threads', y='total_sum', hue='target', data=raw_df, errorbar='sd')
