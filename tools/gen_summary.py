@@ -210,6 +210,15 @@ def create_combined_plots(summary_df, raw_df, output_dir="plots"):
 	plt.savefig(f"{output_dir}/performance_with_error.png", bbox_inches='tight')
 	plt.close()
 
+	plt.figure(figsize=(14, 7))
+	sns.lineplot(x='threads', y='total_sum', hue='target', data=raw_df, marker='o', errorbar='sd')
+	plt.title('Performance Comparison: coroMutex vs std::mutex')
+	plt.xlabel('Number of Threads')
+	plt.ylabel('Total Operations')
+	plt.grid(True)
+	plt.savefig(f"{output_dir}/performance_comparison_lines.png", bbox_inches='tight')
+	plt.close()
+
 	# 2. Uniformity comparison (CV)
 	plt.figure(figsize=(14, 7))
 	sns.lineplot(x='threads', y='cv', hue='target', style='shared', 
