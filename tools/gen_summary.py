@@ -4,7 +4,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
-from scipy.stats import variation
 
 def parse_directory_name(dir_name):
 	"""Extract parameters from directory name"""
@@ -20,48 +19,28 @@ def parse_directory_name(dir_name):
 		}
 	return None
 
-def process_csv(file_path):
-	"""Process CSV file and return statistics"""
+def get_last_sum_from_csv(file_path):
+	"""Get the last sum value from a CSV file"""
 	try:
 		df = pd.read_csv(file_path, header=None)
-		counters = df.iloc[:, 1:-1]  # All counter columns
-		total_sum = df.iloc[-1].iloc[-1]  # Final sum
-		
-		return {
-			'total_sum': total_sum,
-			'mean': counters.mean().mean(),
-			'std_dev': counters.stack().std(),
-			'cv': variation(counters.stack()),
-			'max_diff': (counters.max(axis=1) - counters.min(axis=1)).mean(),
-			'counters_data': counters.values  # Store raw counter values for plotting
-		}
+		return df.iloc[-1].iloc[-1]  # Last column of last row
 	except Exception as e:
 		print(f"Error processing {file_path}: {e}")
 		return None
 
 def parse_usage_file(file_path):
-	metrics = {}
+	"""Parse .usage file to get User Time and System Time"""
 	try:
 		with open(file_path, 'r') as f:
-			for line in f:
-				if 'Wall Time' in line:
-					metrics['wall_time_us'] = int(line.split(':')[1].strip())
-				elif 'User Time' in line:
-					metrics['user_time_us'] = int(line.split(':')[1].strip())
-				elif 'System Time' in line:
-					metrics['system_time_us'] = int(line.split(':')[1].strip())
-		# Calculate CPU usage percentage
-		if 'wall_time_us' in metrics and metrics['wall_time_us'] > 0:
-			metrics['cpu_usage_percent'] = (
-				(metrics['user_time_us'] + metrics['system_time_us']) / 
-				metrics['wall_time_us'] * 100
-			)
-		return metrics
+			content = f.read()
+			user_time = int(re.search(r'User Time \(μs\): (\d+)', content).group(1))
+			system_time = int(re.search(r'System Time \(μs\): (\d+)', content).group(1))
+			return user_time, system_time
 	except Exception as e:
-		print(f"Error parsing {file_path}: {e}")
-		return None
+		print(f"Error processing {file_path}: {e}")
+		return None, None
 
-def process_directory(base_dir="runs"):
+def process_runs_directory(base_dir="runs"):
 	results = []
 
 	for dir_name in os.listdir(base_dir):
@@ -77,241 +56,257 @@ def process_directory(base_dir="runs"):
 		if not os.path.exists(res_dir):
 			continue
 			
-		# Process CSV files
-		csv_data = {}
+		# Initialize data storage for this directory
+		dir_data = {
+			'm': {'last_sum': None, 'user_time': None, 'system_time': None},
+			'cm': {'last_sum': None, 'user_time': None, 'system_time': None}
+		}
+			
+		# Process all files in res directory
 		for file in os.listdir(res_dir):
+			file_path = os.path.join(res_dir, file)
+			
+			# Process CSV files
 			if file.endswith(".csv"):
-				file_path = os.path.join(res_dir, file)
 				target = "cm" if "target_cm" in file else "m" if "target_m" in file else None
-				if not target:
-					continue
-					
-				stats = process_csv(file_path)
-				if stats:
-					csv_data[target] = stats
-		
-		# Process USAGE files
-		usage_data = {}
-		for file in os.listdir(res_dir):
-			if file.endswith(".usage"):
-				file_path = os.path.join(res_dir, file)
+				if target:
+					last_sum = get_last_sum_from_csv(file_path)
+					if last_sum is not None:
+						dir_data[target]['last_sum'] = last_sum
+			
+			# Process .usage files
+			elif file.endswith(".usage"):
 				target = "cm" if "target_cm" in file else "m" if "target_m" in file else None
-				if not target:
-					continue
-					
-				metrics = parse_usage_file(file_path)
-				if metrics:
-					usage_data[target] = metrics
+				if target:
+					user_time, system_time = parse_usage_file(file_path)
+					if user_time is not None:
+						dir_data[target]['user_time'] = user_time
+						dir_data[target]['system_time'] = system_time
 		
-		# Combine data
-		for target in set(csv_data.keys()).union(usage_data.keys()):
-			result = params.copy()
-			result['target'] = target
-			if target in csv_data:
-				result.update(csv_data[target])
-			if target in usage_data:
-				result.update(usage_data[target])
-			results.append(result)
+		# Add collected data to results
+		for target in ['m', 'cm']:
+			if dir_data[target]['last_sum'] is not None or dir_data[target]['user_time'] is not None:
+				result = params.copy()
+				result['target'] = target
+				result.update(dir_data[target])
+				results.append(result)
 
 	return pd.DataFrame(results)
 
-def create_enhanced_summary(df):
-	"""Create summary table with performance, uniformity and resource usage"""
+def create_summary_table(df):
+	"""Create summary table comparing mutex types"""
 	if df.empty:
 		return pd.DataFrame()
 
-	# Group and pivot data
-	summary = df.groupby(['threads', 'coro', 'shared', 'dump_interval', 'worktime', 'target']).agg({
-		'total_sum': 'mean',
-		'mean': 'mean',
-		'std_dev': 'mean',
-		'cv': 'mean',
-		'max_diff': 'mean',
-		'wall_time_us': 'mean',
-		'user_time_us': 'mean',
-		'system_time_us': 'mean',
-		'cpu_usage_percent': 'mean'
-	}).reset_index()
-
-	# Pivot to compare mutex types
-	pivot_df = summary.pivot_table(
+	# Create pivot table for all metrics
+	pivot_df = df.pivot_table(
 		index=['threads', 'coro', 'shared', 'dump_interval', 'worktime'],
 		columns='target',
-		values=[
-			'total_sum', 'mean', 'std_dev', 'cv', 'max_diff',
-			'wall_time_us', 'user_time_us', 'system_time_us', 'cpu_usage_percent'
-		],
-		aggfunc='mean'
+		values=['last_sum', 'user_time', 'system_time'],
+		aggfunc='first'
 	).reset_index()
 
-	# Flatten multi-index columns
+	# Flatten multi-level columns
 	pivot_df.columns = ['_'.join(col).strip('_') for col in pivot_df.columns.values]
 
-	# Calculate comparison metrics
-	if 'total_sum_cm' in pivot_df.columns and 'total_sum_m' in pivot_df.columns:
-		pivot_df['sum_ratio'] = pivot_df['total_sum_cm'] / pivot_df['total_sum_m']
-		pivot_df['sum_diff'] = pivot_df['total_sum_cm'] - pivot_df['total_sum_m']
-		pivot_df['cv_diff'] = pivot_df['cv_cm'] - pivot_df['cv_m']
-		pivot_df['wall_time_ratio'] = pivot_df['wall_time_us_m'] / pivot_df['wall_time_us_cm']
-		pivot_df['cpu_usage_diff'] = pivot_df['cpu_usage_percent_cm'] - pivot_df['cpu_usage_percent_m']
+	# Clean up column names
+	pivot_df = pivot_df.rename(columns={
+		'threads': 'threads',
+		'coro': 'coro',
+		'shared': 'shared',
+		'dump_interval': 'dump_interval',
+		'worktime': 'worktime',
+		'last_sum_m': 'mutex_sum',
+		'last_sum_cm': 'coro_mutex_sum',
+		'user_time_m': 'mutex_user_time',
+		'user_time_cm': 'coro_user_time',
+		'system_time_m': 'mutex_system_time',
+		'system_time_cm': 'coro_system_time'
+	})
 
-	return pivot_df.sort_values(['threads', 'shared', 'coro'])
+	# Calculate performance metrics if both mutex types are available
+	if 'mutex_sum' in pivot_df.columns and 'coro_mutex_sum' in pivot_df.columns:
+		pivot_df['difference'] = pivot_df['coro_mutex_sum'] - pivot_df['mutex_sum']
+		pivot_df['ratio'] = pivot_df['coro_mutex_sum'] / pivot_df['mutex_sum']
 
-def create_combined_heatmaps(raw_df, output_dir="plots"):
-	"""Create side-by-side heatmaps with identical color scales"""
+	# Calculate time differences if available
+	if 'mutex_user_time' in pivot_df.columns and 'coro_user_time' in pivot_df.columns:
+		pivot_df['user_time_diff'] = pivot_df['coro_user_time'] - pivot_df['mutex_user_time']
+		pivot_df['user_time_ratio'] = pivot_df['coro_user_time'] / pivot_df['mutex_user_time']
+		
+	if 'mutex_system_time' in pivot_df.columns and 'coro_system_time' in pivot_df.columns:
+		pivot_df['system_time_diff'] = pivot_df['coro_system_time'] - pivot_df['mutex_system_time']
+		pivot_df['system_time_ratio'] = pivot_df['coro_system_time'] / pivot_df['mutex_system_time']
+
+	return pivot_df.sort_values(['threads', 'coro', 'shared'])
+
+def create_plots(summary_df, output_dir="plots"):
+	"""Create visualization plots from summary table"""
 	if not os.path.exists(output_dir):
 		os.makedirs(output_dir)
 
-	# Filter data
-	m_df = raw_df[raw_df['target'] == 'm']
-	cm_df = raw_df[raw_df['target'] == 'cm']
-
-	# Calculate global min/max for consistent scaling
-	global_min = min(m_df['total_sum'].min(), cm_df['total_sum'].min())
-	global_max = max(m_df['total_sum'].max(), cm_df['total_sum'].max())
-
-	# Create subplots
-	fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
-	fig.suptitle('Сравнение производительности: std::mutex vs coroMutex', fontsize=16)
-
-	# Heatmap for std::mutex
-	pivot_m = m_df.pivot_table(index='threads', columns='shared', 
-								values='total_sum', aggfunc='mean')
-	sns.heatmap(pivot_m, annot=True, fmt=".0f", cmap="YlGnBu", 
-				vmin=global_min, vmax=global_max, ax=ax1)
-	ax1.set_title('std::mutex (общее количество операций)')
-	ax1.set_xlabel('Общие ресурсы')
-	ax1.set_ylabel('Потоки')
-
-	# Heatmap for coroMutex
-	pivot_cm = cm_df.pivot_table(index='threads', columns='shared', 
-								values='total_sum', aggfunc='mean')
-	sns.heatmap(pivot_cm, annot=True, fmt=".0f", cmap="YlGnBu", 
-				vmin=global_min, vmax=global_max, ax=ax2)
-	ax2.set_title('coroMutex (общее количество операций)')
-	ax2.set_xlabel('Общие ресурсы')
-	ax2.set_ylabel('')
-
-	plt.tight_layout()
-	plt.savefig(f"{output_dir}/combined_heatmaps_normalized.png", bbox_inches='tight')
-	plt.close()
-
-def create_combined_plots(summary_df, raw_df, output_dir="plots"):
-	"""Create all visualization plots"""
-	if not os.path.exists(output_dir):
-		os.makedirs(output_dir)
-
-	create_combined_heatmaps(raw_df, output_dir)
-	# 1. Performance comparison with error bars
-	plt.figure(figsize=(14, 7))
-	sns.barplot(x='threads', y='total_sum', hue='target', data=raw_df, errorbar='sd')
-	plt.title('Total Sum with Standard Deviation')
-	plt.ylabel('Total Operations')
-	plt.savefig(f"{output_dir}/performance_with_error.png", bbox_inches='tight')
-	plt.close()
-
-	plt.figure(figsize=(14, 7))
-	sns.lineplot(x='threads', y='total_sum', hue='target', data=raw_df, marker='o', errorbar='sd')
-	plt.title('Performance Comparison: coroMutex vs std::mutex')
-	plt.xlabel('Number of Threads')
-	plt.ylabel('Total Operations')
-	plt.grid(True)
-	plt.savefig(f"{output_dir}/performance_comparison_lines.png", bbox_inches='tight')
-	plt.close()
-
-	# 2. Uniformity comparison (CV)
-	plt.figure(figsize=(14, 7))
-	sns.lineplot(x='threads', y='cv', hue='target', style='shared', 
-				data=raw_df, markers=True, errorbar='sd')
-	plt.title('Counter Uniformity (Coefficient of Variation)')
-	plt.ylabel('CV (lower = more uniform)')
-	plt.savefig(f"{output_dir}/uniformity_comparison.png", bbox_inches='tight')
-	plt.close()
-
-	# 3. NEW: Performance vs Uniformity scatter plot
-	plt.figure(figsize=(14, 7))
-	sns.scatterplot(x='cv', y='total_sum', hue='threads', style='target', 
-					size='shared', data=raw_df, sizes=(50, 200))
-	plt.title('Performance vs Counter Uniformity')
-	plt.xlabel('Coefficient of Variation')
-	plt.ylabel('Total Operations')
-	plt.savefig(f"{output_dir}/performance_vs_uniformity.png", bbox_inches='tight')
-	plt.close()
-
-	# 4. Max difference heatmap
-	plt.figure(figsize=(12, 8))
-	pivot = raw_df.pivot_table(index='threads', columns='shared', 
-								values='max_diff', aggfunc='mean')
-	sns.heatmap(pivot, annot=True, fmt=".1f", cmap="YlOrRd")
-	plt.title('Average Max Difference Between Counters')
-	plt.savefig(f"{output_dir}/max_diff_heatmap.png", bbox_inches='tight')
-	plt.close()
-
-def create_resource_plots(summary_df, output_dir="plots"):
-	"""Create plots for resource usage analysis"""
-	if not os.path.exists(output_dir):
-		os.makedirs(output_dir)
-
-	# 1. Wall Time Comparison
-	plt.figure(figsize=(12, 6))
-	sns.barplot(
-		x='threads', 
-		y='value', 
-		hue='variable',
-		data=pd.melt(
-			summary_df, 
-			id_vars=['threads'], 
-			value_vars=['wall_time_us_cm', 'wall_time_us_m']
+	# 1. Performance comparison plot
+	if 'mutex_sum' in summary_df.columns and 'coro_mutex_sum' in summary_df.columns:
+		plt.figure(figsize=(12, 6))
+		sns.barplot(
+			x='threads', 
+			y='value', 
+			hue='variable',
+			data=pd.melt(
+				summary_df, 
+				id_vars=['threads', 'coro', 'shared'], 
+				value_vars=['mutex_sum', 'coro_mutex_sum']
+			)
 		)
-	)
-	plt.title('Wall Time Comparison (lower is better)')
-	plt.ylabel('Wall Time (μs)')
-	plt.savefig(f"{output_dir}/wall_time_comparison.png", bbox_inches='tight')
-	plt.close()
+		plt.title('Performance: std::mutex vs coroMutex')
+		plt.ylabel('Total operations')
+		plt.savefig(f"{output_dir}/performance_comparison.png", bbox_inches='tight')
+		plt.close()
 
-	# 2. CPU Usage Comparison
-	plt.figure(figsize=(12, 6))
-	sns.lineplot(
-		x='threads', 
-		y='value', 
-		hue='variable',
-		style='shared',
-		markers=True,
-		data=pd.melt(
-			summary_df, 
-			id_vars=['threads', 'shared'], 
-			value_vars=['cpu_usage_percent_cm', 'cpu_usage_percent_m']
+		# 2. Ratio by threads
+		if 'ratio' in summary_df.columns:
+			plt.figure(figsize=(10, 5))
+			sns.lineplot(x='threads', y='ratio', hue='shared', data=summary_df, marker='o')
+			plt.axhline(1, color='red', linestyle='--', alpha=0.5)
+			plt.title('Performance Ratio (coroMutex/std::mutex)')
+			plt.ylabel('Ratio (higher = better for coroMutex)')
+			plt.savefig(f"{output_dir}/performance_ratio.png", bbox_inches='tight')
+			plt.close()
+
+	# 3. User Time comparison
+	if 'mutex_user_time' in summary_df.columns and 'coro_user_time' in summary_df.columns:
+		plt.figure(figsize=(12, 6))
+		sns.barplot(
+			x='threads', 
+			y='value', 
+			hue='variable',
+			data=pd.melt(
+				summary_df, 
+				id_vars=['threads', 'coro', 'shared'], 
+				value_vars=['mutex_user_time', 'coro_user_time']
+			)
 		)
-	)
-	plt.title('CPU Usage Percentage Comparison')
-	plt.ylabel('CPU Usage (%)')
-	plt.savefig(f"{output_dir}/cpu_usage_comparison.png", bbox_inches='tight')
-	plt.close()
+		plt.title('User Time Comparison: std::mutex vs coroMutex (μs)')
+		plt.ylabel('User Time (μs)')
+		plt.savefig(f"{output_dir}/user_time_comparison.png", bbox_inches='tight')
+		plt.close()
+
+		# 4. User Time ratio
+		if 'user_time_ratio' in summary_df.columns:
+			plt.figure(figsize=(10, 5))
+			sns.lineplot(x='threads', y='user_time_ratio', hue='shared', data=summary_df, marker='o')
+			plt.axhline(1, color='red', linestyle='--', alpha=0.5)
+			plt.title('User Time Ratio (coroMutex/std::mutex)')
+			plt.ylabel('Ratio (lower = better for coroMutex)')
+			plt.savefig(f"{output_dir}/user_time_ratio.png", bbox_inches='tight')
+			plt.close()
+
+	# 5. System Time comparison
+	if 'mutex_system_time' in summary_df.columns and 'coro_system_time' in summary_df.columns:
+		plt.figure(figsize=(12, 6))
+		sns.barplot(
+			x='threads', 
+			y='value', 
+			hue='variable',
+			data=pd.melt(
+				summary_df, 
+				id_vars=['threads', 'coro', 'shared'], 
+				value_vars=['mutex_system_time', 'coro_system_time']
+			)
+		)
+		plt.title('System Time Comparison: std::mutex vs coroMutex (μs)')
+		plt.ylabel('System Time (μs)')
+		plt.savefig(f"{output_dir}/system_time_comparison.png", bbox_inches='tight')
+		plt.close()
+
+		# 6. System Time ratio
+		if 'system_time_ratio' in summary_df.columns:
+			plt.figure(figsize=(10, 5))
+			sns.lineplot(x='threads', y='system_time_ratio', hue='shared', data=summary_df, marker='o')
+			plt.axhline(1, color='red', linestyle='--', alpha=0.5)
+			plt.title('System Time Ratio (coroMutex/std::mutex)')
+			plt.ylabel('Ratio (lower = better for coroMutex)')
+			plt.savefig(f"{output_dir}/system_time_ratio.png", bbox_inches='tight')
+			plt.close()
+
+	if 'coro' in summary_df.columns and 'ratio' in summary_df.columns:
+		plt.figure(figsize=(10, 5))
+		sns.lineplot(x='coro', y='ratio', hue='threads', style='shared', data=summary_df, marker='o')
+		plt.axhline(1, color='red', linestyle='--', alpha=0.5)
+		plt.title('Performance Ratio by Coroutine Count')
+		plt.ylabel('Ratio (coroMutex/std::mutex)')
+		plt.savefig(f"{output_dir}/performance_ratio_by_coro.png", bbox_inches='tight')
+		plt.close()
+
+	if all(col in summary_df.columns for col in ['mutex_user_time', 'mutex_system_time', 'coro_user_time', 'coro_system_time']):
+		summary_df['total_time_m'] = summary_df['mutex_user_time'] + summary_df['mutex_system_time']
+		summary_df['total_time_cm'] = summary_df['coro_user_time'] + summary_df['coro_system_time']
+
+		plt.figure(figsize=(12, 6))
+		sns.barplot(
+			x='threads',
+			y='value',
+			hue='variable',
+			data=pd.melt(
+				summary_df,
+				id_vars=['threads', 'coro', 'shared'],
+				value_vars=['total_time_m', 'total_time_cm']
+			)
+		)
+		plt.title('Total Execution Time Comparison (μs)')
+		plt.ylabel('Total Time (User + System)')
+		plt.savefig(f"{output_dir}/total_time_comparison.png", bbox_inches='tight')
+		plt.close()
+
+	if all(col in summary_df.columns for col in ['mutex_user_time', 'mutex_system_time', 'coro_user_time', 'coro_system_time']):
+		fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+		
+		# For std::mutex
+		summary_df[['mutex_user_time', 'mutex_system_time']].plot(
+			kind='bar', stacked=True, ax=axes[0],
+			title='Time Distribution: std::mutex'
+		)
+		axes[0].set_ylabel('Time (μs)')
+		
+		# For coroMutex
+		summary_df[['coro_user_time', 'coro_system_time']].plot(
+			kind='bar', stacked=True, ax=axes[1],
+			title='Time Distribution: coroMutex'
+		)
+		
+		plt.tight_layout()
+		plt.savefig(f"{output_dir}/time_distribution.png", bbox_inches='tight')
+		plt.close()
+
+	if all(col in summary_df.columns for col in ['threads', 'coro', 'ratio']):
+		pivot = summary_df.pivot_table(index='threads', columns='coro', values='ratio')
+		plt.figure(figsize=(10, 8))
+		sns.heatmap(pivot, annot=True, fmt=".2f", cmap="YlGnBu", center=1.0)
+		plt.title('Performance Ratio Heatmap (coroMutex/std::mutex)')
+		plt.savefig(f"{output_dir}/performance_heatmap.png", bbox_inches='tight')
+		plt.close()
 
 def main():
-	print("Processing benchmark data with resource usage...")
-	raw_df = process_directory()
+	print("Processing benchmark data...")
+	df = process_runs_directory()
 
-	if raw_df.empty:
+	if df.empty:
 		print("No valid benchmark data found.")
 		return
 
-	# Create enhanced summary table
-	summary_df = create_enhanced_summary(raw_df)
+	# Create and save summary table
+	summary_df = create_summary_table(df)
 	timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-	# Save results
-	summary_file = f"full_summary_{timestamp}.csv"
+	summary_file = f"summary_table_{timestamp}.csv"
 	summary_df.to_csv(summary_file, index=False)
 
-	# Create all plots
-	create_combined_plots(summary_df, raw_df)
-	create_resource_plots(summary_df)
+	# Create plots
+	create_plots(summary_df)
 
-	print("\nFull summary saved to:", summary_file)
-	print("Visualizations saved to: plots/ directory")
-	print("\nSummary table columns preview:")
-	print("\n".join(summary_df.columns.tolist()))
+	print("\nSummary table saved to:", summary_file)
+	print("Plots saved to: plots/ directory")
+	print("\nSummary table preview:")
+	print(summary_df.head().to_string(index=False))
 
 if __name__ == "__main__":
 	main()

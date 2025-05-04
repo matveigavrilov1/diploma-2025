@@ -127,13 +127,13 @@ int main(int argc, char* argv[])
 			size_t idx = i % sharedNumberOption;
 			if (targetOption == "m")
 			{
-				cs::taskManager::instance().execute(coroutine(*counter, idx, running, mtxVec[idx]));
-				spdlog::debug("Started coroutine {} with std::mutex. id: {}", i, i % sharedNumberOption);
+				cs::taskManager::instance().execute(coroutine(*counter, i, running, mtxVec[idx], idx));
+				spdlog::debug("Started coroutine {} with std::mutex. counter idx: {}", i, idx);
 			}
 			else
 			{
-				cs::taskManager::instance().execute(coroutine(*counter, idx, running, coroMtxVec[idx]));
-				spdlog::debug("Started coroutine {} with coroMutex.  id: {}", i, i % sharedNumberOption);
+				cs::taskManager::instance().execute(coroutine(*counter, i, running, coroMtxVec[idx], idx));
+				spdlog::debug("Started coroutine {} with coroMutex. counter idx: {}", i, idx);
 			}
 		}
 		catch (const std::exception& e)
@@ -254,7 +254,7 @@ void initLogger()
 		std::vector<spdlog::sink_ptr> sinks { console_sink, file_sink };
 		auto logger = std::make_shared<spdlog::logger>("main", begin(sinks), end(sinks));
 
-		logger->set_level(spdlog::level::info);
+		logger->set_level(spdlog::level::debug);
 		spdlog::set_default_logger(logger);
 	}
 	catch (const spdlog::spdlog_ex& ex)
