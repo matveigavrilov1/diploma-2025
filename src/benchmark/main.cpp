@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
 	spdlog::info("Initializing components");
 	try
 	{
-		counter.emplace( sharedNumberOption);
+		counter.emplace(sharedNumberOption);
 		spdlog::debug("Counter initialized with shared objects number: {}", sharedNumberOption);
 
 		counterDumper.emplace(*counter, getCounterLogFilePath(), std::chrono::milliseconds(dumpPeriodOption));
@@ -110,8 +110,8 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	std::mutex mtx;
-	cs::coroMutex coroMtx;
+	std::vector<std::mutex> mtxVec(sharedNumberOption);
+	std::vector<cs::coroMutex> coroMtxVec(sharedNumberOption);
 	// workers start
 	counterDumper->start();
 
@@ -124,14 +124,15 @@ int main(int argc, char* argv[])
 	{
 		try
 		{
+			size_t idx = i % sharedNumberOption;
 			if (targetOption == "m")
 			{
-				cs::taskManager::instance().execute(coroutine(*counter, i % sharedNumberOption, running, mtx));
+				cs::taskManager::instance().execute(coroutine(*counter, idx, running, mtxVec[idx]));
 				spdlog::debug("Started coroutine {} with std::mutex. id: {}", i, i % sharedNumberOption);
 			}
 			else
 			{
-				cs::taskManager::instance().execute(coroutine(*counter, i % sharedNumberOption, running, coroMtx));
+				cs::taskManager::instance().execute(coroutine(*counter, idx, running, coroMtxVec[idx]));
 				spdlog::debug("Started coroutine {} with coroMutex.  id: {}", i, i % sharedNumberOption);
 			}
 		}
